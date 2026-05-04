@@ -38,6 +38,9 @@ const customPreset = {
   emergency: false,
 };
 
+type PickupTiming = 'ASAP' | 'Specific time';
+type CarSeatNeed = 'Unknown' | 'Needed' | 'Not needed';
+
 function normalizeMinute(minute: string) {
   return minute.startsWith(':') ? minute.replace(':', '') : minute;
 }
@@ -67,6 +70,11 @@ export default function CreateSitRequestScreen() {
   const [requestTitle, setRequestTitle] = useState(selectedPreset.title);
   const [autoPingMode, setAutoPingMode] = useState<AutoPingMode>(selectedPreset.autoPingMode);
   const [isPastSit, setIsPastSit] = useState(false);
+  const [pickupTiming, setPickupTiming] = useState<PickupTiming>('ASAP');
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [pickupContact, setPickupContact] = useState('');
+  const [carSeatNeed, setCarSeatNeed] = useState<CarSeatNeed>('Unknown');
+  const [handoffDetails, setHandoffDetails] = useState('');
   const [daycareDetails, setDaycareDetails] = useState('');
 
   const hours = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
@@ -78,6 +86,8 @@ export default function CreateSitRequestScreen() {
     () => `${selectedHour}:${selectedMinute} ${selectedMeridiem}`,
     [selectedHour, selectedMinute, selectedMeridiem]
   );
+
+  const emergencyStartLabel = pickupTiming === 'ASAP' ? 'ASAP' : startTimeDisplay;
 
   const durationDisplay = useMemo(
     () => displayDuration(selectedDurationHour, selectedDurationMinute),
@@ -108,6 +118,11 @@ export default function CreateSitRequestScreen() {
     setRequestTitle(selectedPreset.title);
     setAutoPingMode(selectedPreset.autoPingMode);
     setIsPastSit(false);
+    setPickupTiming('ASAP');
+    setPickupLocation('');
+    setPickupContact('');
+    setCarSeatNeed('Unknown');
+    setHandoffDetails('');
     setDaycareDetails('');
   }, [selectedPresetKey]);
 
@@ -116,12 +131,16 @@ export default function CreateSitRequestScreen() {
       return 'Past Sit Mode: requester-only entry, no AutoPing, immediate ledger posting.';
     }
 
+    if (isEmergency) {
+      return 'Emergency broadcast: confirm details, then ping the circle immediately for the first YES.';
+    }
+
     if (autoPingMode === 'broadcast') {
       return 'Broadcast AutoPing: all candidates get pinged at once and the first YES wins.';
     }
 
     return 'Sequential AutoPing: candidates are contacted in debt-first order until the first YES.';
-  }, [autoPingMode, isPastSit]);
+  }, [autoPingMode, isEmergency, isPastSit]);
 
   const handleSubmit = () => {
     if (!dateLabel.trim() || dateLabel === 'Select date') {
@@ -129,8 +148,28 @@ export default function CreateSitRequestScreen() {
       return;
     }
 
-    const finalComments = isEmergency && daycareDetails.trim()
-      ? `${comments}\nPickup details: ${daycareDetails.trim()}`
+    if (isEmergency && !pickupLocation.trim()) {
+      Alert.alert('Pickup location needed', 'Add the daycare, school, or pickup location before broadcasting.');
+      return;
+    }
+
+    const emergencyDetails = isEmergency
+      ? [
+          `Pickup timing: ${emergencyStartLabel}`,
+          `Pickup location: ${pickupLocation.trim()}`,
+          pickupContact.trim() ? `Pickup contact: ${pickupContact.trim()}` : '',
+          `Car seat: ${carSeatNeed}`,
+          handoffDetails.trim() ? `After-pickup / handoff: ${handoffDetails.trim()}` : '',
+          daycareDetails.trim() ? `Other details: ${daycareDetails.trim()}` : '',
+          'Requester must authorize pickup by the confirmed sitter name.',
+          'Exchange phone/address details off app if needed.',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '';
+
+    const finalComments = isEmergency
+      ? `${comments}\n${emergencyDetails}`
       : comments;
 
     const postRequest = () => {
@@ -138,7 +177,7 @@ export default function CreateSitRequestScreen() {
         presetKey: selectedPresetKey,
         title: requestTitle,
         dateLabel,
-        startTime: startTimeDisplay,
+        startTime: isEmergency ? emergencyStartLabel : startTimeDisplay,
         duration: durationDisplay,
         kidsLabel: selectedKids,
         locationLabel: selectedLocation,
@@ -147,6 +186,17 @@ export default function CreateSitRequestScreen() {
         autoPingMode: isPastSit ? 'disabled' : autoPingMode,
       });
       router.replace({ pathname: '/explore', params: { requestId: nextRequest.id } });
+    };
+
+    const confirmEmergency = () => {
+      Alert.alert(
+        'Broadcast emergency pickup?',
+        'This will ping the circle now. First YES wins. You still need to authorize pickup with the daycare/school and share any off-app phone or address details needed for handoff.',
+        [
+          { text: 'Review Again', style: 'cancel' },
+          { text: 'Broadcast Now', style: 'destructive', onPress: postRequest },
+        ]
+      );
     };
 
     if (activeRequest && !isPastSit) {
@@ -160,12 +210,18 @@ export default function CreateSitRequestScreen() {
             style: 'destructive',
             onPress: () => {
               cancelActiveRequest();
-              postRequest();
+              if (isEmergency) confirmEmergency();
+              else postRequest();
             },
           },
           { text: 'Keep Current', style: 'cancel' },
         ]
       );
+      return;
+    }
+
+    if (isEmergency && !isPastSit) {
+      confirmEmergency();
       return;
     }
 
@@ -199,124 +255,172 @@ export default function CreateSitRequestScreen() {
         <TextInput style={styles.input} value={dateLabel} onChangeText={setDateLabel} />
       </View>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.label}>Start Time</Text>
-        <Text style={styles.selectedValue}>Selected: {startTimeDisplay}</Text>
-
-        <Text style={styles.gridSectionLabel}>Hour</Text>
-        <View style={styles.grid}>
-          {hours.map((hour) => (
-            <TouchableOpacity
-              key={`start-hour-${hour}`}
-              style={[styles.gridButton, selectedHour === hour ? styles.gridButtonSelected : null]}
-              onPress={() => setSelectedHour(hour)}>
-              <Text style={[styles.gridButtonText, selectedHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
+      {isEmergency ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.label}>Emergency Pickup Timing</Text>
+          <View style={styles.row}>
+            <TouchableOpacity style={[styles.optionButton, pickupTiming === 'ASAP' ? styles.optionButtonSelected : null]} onPress={() => setPickupTiming('ASAP')}>
+              <Text style={[styles.optionText, pickupTiming === 'ASAP' ? styles.optionTextSelected : null]}>ASAP</Text>
+              <Text style={[styles.optionSubtext, pickupTiming === 'ASAP' ? styles.optionSubtextSelected : null]}>Default urgent pickup</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.gridSectionLabel}>Minute</Text>
-        <View style={styles.grid}>
-          {minutes.map((minute) => (
-            <TouchableOpacity
-              key={`start-minute-${minute}`}
-              style={[styles.gridButton, selectedMinute === minute ? styles.gridButtonSelected : null]}
-              onPress={() => setSelectedMinute(minute)}>
-              <Text style={[styles.gridButtonText, selectedMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
+            <TouchableOpacity style={[styles.optionButton, pickupTiming === 'Specific time' ? styles.optionButtonSelected : null]} onPress={() => setPickupTiming('Specific time')}>
+              <Text style={[styles.optionText, pickupTiming === 'Specific time' ? styles.optionTextSelected : null]}>Specific Time</Text>
+              <Text style={[styles.optionSubtext, pickupTiming === 'Specific time' ? styles.optionSubtextSelected : null]}>Use time picker below</Text>
             </TouchableOpacity>
-          ))}
+          </View>
         </View>
+      ) : null}
 
-        <Text style={styles.gridSectionLabel}>AM / PM</Text>
-        <View style={styles.row}>
-          {meridiems.map((meridiem) => (
-            <TouchableOpacity
-              key={meridiem}
-              style={[styles.optionButton, selectedMeridiem === meridiem ? styles.optionButtonSelected : null]}
-              onPress={() => setSelectedMeridiem(meridiem)}>
-              <Text style={[styles.optionText, selectedMeridiem === meridiem ? styles.optionTextSelected : null]}>{meridiem}</Text>
-            </TouchableOpacity>
-          ))}
+      {(!isEmergency || pickupTiming === 'Specific time') ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.label}>{isEmergency ? 'Pickup Time' : 'Start Time'}</Text>
+          <Text style={styles.selectedValue}>Selected: {startTimeDisplay}</Text>
+
+          <Text style={styles.gridSectionLabel}>Hour</Text>
+          <View style={styles.grid}>
+            {hours.map((hour) => (
+              <TouchableOpacity
+                key={`start-hour-${hour}`}
+                style={[styles.gridButton, selectedHour === hour ? styles.gridButtonSelected : null]}
+                onPress={() => setSelectedHour(hour)}>
+                <Text style={[styles.gridButtonText, selectedHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.gridSectionLabel}>Minute</Text>
+          <View style={styles.grid}>
+            {minutes.map((minute) => (
+              <TouchableOpacity
+                key={`start-minute-${minute}`}
+                style={[styles.gridButton, selectedMinute === minute ? styles.gridButtonSelected : null]}
+                onPress={() => setSelectedMinute(minute)}>
+                <Text style={[styles.gridButtonText, selectedMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.gridSectionLabel}>AM / PM</Text>
+          <View style={styles.row}>
+            {meridiems.map((meridiem) => (
+              <TouchableOpacity
+                key={meridiem}
+                style={[styles.optionButton, selectedMeridiem === meridiem ? styles.optionButtonSelected : null]}
+                onPress={() => setSelectedMeridiem(meridiem)}>
+                <Text style={[styles.optionText, selectedMeridiem === meridiem ? styles.optionTextSelected : null]}>{meridiem}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.label}>Duration</Text>
-        <Text style={styles.selectedValue}>Selected: {durationDisplay} hours</Text>
+      {!isEmergency ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.label}>Duration</Text>
+          <Text style={styles.selectedValue}>Selected: {durationDisplay} hours</Text>
 
-        <Text style={styles.gridSectionLabel}>Hours</Text>
-        <View style={styles.grid}>
-          {hours.map((hour) => (
-            <TouchableOpacity
-              key={`duration-hour-${hour}`}
-              style={[styles.gridButton, selectedDurationHour === hour ? styles.gridButtonSelected : null]}
-              onPress={() => setSelectedDurationHour(hour)}>
-              <Text style={[styles.gridButtonText, selectedDurationHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
-            </TouchableOpacity>
-          ))}
+          <Text style={styles.gridSectionLabel}>Hours</Text>
+          <View style={styles.grid}>
+            {hours.map((hour) => (
+              <TouchableOpacity
+                key={`duration-hour-${hour}`}
+                style={[styles.gridButton, selectedDurationHour === hour ? styles.gridButtonSelected : null]}
+                onPress={() => setSelectedDurationHour(hour)}>
+                <Text style={[styles.gridButtonText, selectedDurationHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.gridSectionLabel}>Minutes</Text>
+          <View style={styles.grid}>
+            {minutes.map((minute) => (
+              <TouchableOpacity
+                key={`duration-minute-${minute}`}
+                style={[styles.gridButton, selectedDurationMinute === minute ? styles.gridButtonSelected : null]}
+                onPress={() => setSelectedDurationMinute(minute)}>
+                <Text style={[styles.gridButtonText, selectedDurationMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-
-        <Text style={styles.gridSectionLabel}>Minutes</Text>
-        <View style={styles.grid}>
-          {minutes.map((minute) => (
-            <TouchableOpacity
-              key={`duration-minute-${minute}`}
-              style={[styles.gridButton, selectedDurationMinute === minute ? styles.gridButtonSelected : null]}
-              onPress={() => setSelectedDurationMinute(minute)}>
-              <Text style={[styles.gridButtonText, selectedDurationMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.label}>Location</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[styles.optionButton, selectedLocation === 'Drop-off' ? styles.optionButtonSelected : null]}
-            onPress={() => setSelectedLocation('Drop-off')}>
-            <Text style={[styles.optionText, selectedLocation === 'Drop-off' ? styles.optionTextSelected : null]}>Drop-Off</Text>
-            <Text style={[styles.optionSubtext, selectedLocation === 'Drop-off' ? styles.optionSubtextSelected : null]}>At sitter&apos;s place</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.optionButton, selectedLocation === 'My Place' ? styles.optionButtonSelected : null]}
-            onPress={() => setSelectedLocation('My Place')}>
-            <Text style={[styles.optionText, selectedLocation === 'My Place' ? styles.optionTextSelected : null]}>My Place</Text>
-            <Text style={[styles.optionSubtext, selectedLocation === 'My Place' ? styles.optionSubtextSelected : null]}>Sit happens at home</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.label}>Kids</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[styles.optionButton, selectedKids === '1 Child' ? styles.optionButtonSelected : null]}
-            onPress={() => setSelectedKids('1 Child')}>
-            <Text style={[styles.optionText, selectedKids === '1 Child' ? styles.optionTextSelected : null]}>One Child</Text>
-            <Text style={[styles.optionSubtext, selectedKids === '1 Child' ? styles.optionSubtextSelected : null]}>Standard sit</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.optionButton, selectedKids === '2+ Children' ? styles.optionButtonSelected : null]}
-            onPress={() => setSelectedKids('2+ Children')}>
-            <Text style={[styles.optionText, selectedKids === '2+ Children' ? styles.optionTextSelected : null]}>2+ Children</Text>
-            <Text style={[styles.optionSubtext, selectedKids === '2+ Children' ? styles.optionSubtextSelected : null]}>Bigger ask</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      ) : null}
 
       {isEmergency ? (
         <View style={styles.sectionCard}>
-          <Text style={styles.label}>Emergency Pickup Details</Text>
+          <Text style={styles.label}>Pickup Information</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Daycare or school name and location"
+            value={pickupLocation}
+            onChangeText={setPickupLocation}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Pickup contact / front desk phone / teacher name"
+            value={pickupContact}
+            onChangeText={setPickupContact}
+          />
+          <Text style={styles.gridSectionLabel}>Car seat</Text>
+          <View style={styles.row}>
+            {(['Unknown', 'Needed', 'Not needed'] as CarSeatNeed[]).map((need) => (
+              <TouchableOpacity key={need} style={[styles.optionButton, carSeatNeed === need ? styles.optionButtonSelected : null]} onPress={() => setCarSeatNeed(need)}>
+                <Text style={[styles.optionText, carSeatNeed === need ? styles.optionTextSelected : null]}>{need}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <TextInput
             style={[styles.input, styles.multilineInput]}
-            placeholder="Example: Kindercare on Martin Way. Authorized pickup details."
+            placeholder="Where should the sitter take the child? How will requester retrieve child after work?"
+            multiline
+            value={handoffDetails}
+            onChangeText={setHandoffDetails}
+          />
+          <TextInput
+            style={[styles.input, styles.multilineInput]}
+            placeholder="Other details: child name, authorization note, allergies, gate code, etc."
             multiline
             value={daycareDetails}
             onChangeText={setDaycareDetails}
           />
+          <Text style={styles.emergencyNote}>Reminder: TimeOut can coordinate the ping, but pickup authorization and phone/address exchange are still handled by the parents and confirmed sitter.</Text>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.sectionCard}>
+          <Text style={styles.label}>Location</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.optionButton, selectedLocation === 'Drop-off' ? styles.optionButtonSelected : null]}
+              onPress={() => setSelectedLocation('Drop-off')}>
+              <Text style={[styles.optionText, selectedLocation === 'Drop-off' ? styles.optionTextSelected : null]}>Drop-Off</Text>
+              <Text style={[styles.optionSubtext, selectedLocation === 'Drop-off' ? styles.optionSubtextSelected : null]}>At sitter&apos;s place</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.optionButton, selectedLocation === 'My Place' ? styles.optionButtonSelected : null]}
+              onPress={() => setSelectedLocation('My Place')}>
+              <Text style={[styles.optionText, selectedLocation === 'My Place' ? styles.optionTextSelected : null]}>My Place</Text>
+              <Text style={[styles.optionSubtext, selectedLocation === 'My Place' ? styles.optionSubtextSelected : null]}>Sit happens at home</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Kids</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.optionButton, selectedKids === '1 Child' ? styles.optionButtonSelected : null]}
+              onPress={() => setSelectedKids('1 Child')}>
+              <Text style={[styles.optionText, selectedKids === '1 Child' ? styles.optionTextSelected : null]}>One Child</Text>
+              <Text style={[styles.optionSubtext, selectedKids === '1 Child' ? styles.optionSubtextSelected : null]}>Standard sit</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.optionButton, selectedKids === '2+ Children' ? styles.optionButtonSelected : null]}
+              onPress={() => setSelectedKids('2+ Children')}>
+              <Text style={[styles.optionText, selectedKids === '2+ Children' ? styles.optionTextSelected : null]}>2+ Children</Text>
+              <Text style={[styles.optionSubtext, selectedKids === '2+ Children' ? styles.optionSubtextSelected : null]}>Bigger ask</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.sectionCard}>
         <Text style={styles.label}>Estimated Points</Text>
@@ -337,19 +441,23 @@ export default function CreateSitRequestScreen() {
           onChangeText={setComments}
         />
 
-        <Text style={styles.label}>Posting Mode</Text>
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.optionButton, isPastSit ? null : styles.optionButtonSelected]} onPress={() => setIsPastSit(false)}>
-            <Text style={[styles.optionText, isPastSit ? null : styles.optionTextSelected]}>AutoPing</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.optionButton, isPastSit ? styles.optionButtonSelected : null]} onPress={() => setIsPastSit(true)}>
-            <Text style={[styles.optionText, isPastSit ? styles.optionTextSelected : null]}>Past Sit</Text>
-          </TouchableOpacity>
-        </View>
+        {!isEmergency ? (
+          <>
+            <Text style={styles.label}>Posting Mode</Text>
+            <View style={styles.row}>
+              <TouchableOpacity style={[styles.optionButton, isPastSit ? null : styles.optionButtonSelected]} onPress={() => setIsPastSit(false)}>
+                <Text style={[styles.optionText, isPastSit ? null : styles.optionTextSelected]}>AutoPing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.optionButton, isPastSit ? styles.optionButtonSelected : null]} onPress={() => setIsPastSit(true)}>
+                <Text style={[styles.optionText, isPastSit ? styles.optionTextSelected : null]}>Past Sit</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>{isPastSit ? 'Log Past Sit' : 'Start AutoPing'}</Text>
+        <Text style={styles.primaryButtonText}>{isEmergency ? 'Confirm & Broadcast Pickup' : isPastSit ? 'Log Past Sit' : 'Start AutoPing'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.ghostButton} onPress={() => router.back()}>
@@ -390,6 +498,7 @@ const styles = StyleSheet.create({
   optionTextSelected: { color: '#ffffff' },
   optionSubtext: { color: '#9c6a82', fontSize: 12, marginTop: 6, textAlign: 'center' },
   optionSubtextSelected: { color: '#ffd9ea' },
+  emergencyNote: { color: '#8a1859', fontSize: 13, fontWeight: '600', lineHeight: 19, marginTop: 8 },
   pointRow: { alignItems: 'baseline', flexDirection: 'row', gap: 8 },
   pointNumber: { color: '#be185d', fontSize: 42, fontWeight: '800' },
   pointText: { color: '#84516e', fontSize: 18, fontWeight: '700' },
