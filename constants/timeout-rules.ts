@@ -47,7 +47,9 @@ export type TimeoutPreset = {
 
 export type NotificationPreviewInput = {
   requesterName: string;
+  requesterPhone?: string;
   sitterName?: string;
+  sitterPhone?: string;
   title: string;
   dateLabel: string;
   startTime: string;
@@ -56,6 +58,8 @@ export type NotificationPreviewInput = {
   locationLabel: string;
   pickupLocation?: string;
   confirmedPhone?: string;
+  handoffNote?: string;
+  points?: number;
 };
 
 export const POINTS_PER_HOUR = 4;
@@ -89,11 +93,27 @@ export function buildSitRequestMessage(input: NotificationPreviewInput) {
 }
 
 export function buildEmergencyPickupMessage(input: NotificationPreviewInput) {
-  return `${input.requesterName} needs emergency daycare pickup.\n\nLocation: ${input.pickupLocation || 'pickup location pending'}\nPickup: ${input.startTime}\n\nReply YES if you can help.`;
+  return `${input.requesterName} needs emergency daycare pickup.\n\nLocation: ${input.pickupLocation || 'pickup location pending'}\nPickup: ${input.startTime}\n\nReply YES if you can help. Include the best phone number for handoff.`;
 }
 
 export function buildConfirmationMessage(input: NotificationPreviewInput) {
   return `TimeOut sit confirmed.\n\nRequester: ${input.requesterName}\nSitter: ${input.sitterName || 'confirmed sitter'}\n${input.dateLabel} ${input.startTime}\n${input.confirmedPhone ? `Phone: ${input.confirmedPhone}\n` : ''}\nReminder: cancel if plans change.`;
+}
+
+export function buildEmergencyConfirmationMessage(input: NotificationPreviewInput) {
+  return `Emergency pickup confirmed.\n\nRequester: ${input.requesterName}${input.requesterPhone ? ` ${input.requesterPhone}` : ''}\nPickup helper: ${input.sitterName || 'confirmed sitter'}${input.sitterPhone ? ` ${input.sitterPhone}` : ''}\nPickup: ${input.pickupLocation || 'pickup location pending'}\nTiming: ${input.startTime}\n${input.handoffNote ? `Handoff: ${input.handoffNote}\n` : ''}\nSitter: press when pickup is completed.`;
+}
+
+export function buildPickupCompleteMessage(input: NotificationPreviewInput) {
+  return `Pickup marked complete.\n\n${input.sitterName || 'The sitter'} picked up the child.\nRequester: coordinate handoff directly.\nBoth parties: press when requester arrives and the sit ends.`;
+}
+
+export function buildEmergencyEndSitMessage(input: NotificationPreviewInput) {
+  return `Emergency pickup sit ended.\n\nRequester: ${input.requesterName}\nSitter: ${input.sitterName || 'confirmed sitter'}\nThe system can now settle points.`;
+}
+
+export function buildPointsSettledMessage(input: NotificationPreviewInput) {
+  return `Points settled.\n\n${input.sitterName || 'Sitter'} earned ${input.points ?? 'the'} TimeOut points from ${input.requesterName}.`;
 }
 
 export function buildReminderMessage(input: NotificationPreviewInput, timing: '24 hours' | '2 hours') {
