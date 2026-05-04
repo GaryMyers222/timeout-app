@@ -12,7 +12,7 @@ export type Candidate = {
 export type PingEvent = {
   candidateName: string;
   sentAt: string;
-  status: 'No response' | 'YES' | 'Waiting';
+  status: 'No response' | 'YES' | 'Waiting' | 'Filled';
 };
 
 export type SitRequest = {
@@ -29,17 +29,20 @@ export type SitRequest = {
   isPastSit: boolean;
   autoPingMode: AutoPingMode;
   status: 'active' | 'confirmed' | 'timed_out' | 'past_logged' | 'cancelled';
+  confirmedSitterName?: string;
   candidates: Candidate[];
   pingEvents: PingEvent[];
 };
 
-type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents'>;
+type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName'>;
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
   activeRequest: SitRequest | null;
   createRequest: (input: CreateSitRequestInput) => SitRequest;
   cancelActiveRequest: () => void;
+  confirmFirstYes: (requestId: string) => void;
+  resetMockRequests: () => void;
 };
 
 const TimeoutStoreContext = createContext<TimeoutStoreValue | null>(null);
@@ -60,18 +63,22 @@ function buildMockPingEvents(autoPingMode: AutoPingMode, candidates: Candidate[]
   if (autoPingMode === 'disabled') return [];
 
   if (autoPingMode === 'broadcast') {
-    return candidates.slice(0, 4).map((candidate, index) => ({
+    return candidates.slice(0, 5).map((candidate, index) => ({
       candidateName: candidate.name,
       sentAt: 'now',
       status: index === 1 ? 'YES' : 'No response',
     }));
   }
 
-  return candidates.slice(0, 4).map((candidate, index) => ({
+  return candidates.slice(0, 5).map((candidate, index) => ({
     candidateName: candidate.name,
-    sentAt: `5:${String(9 + index * 10).padStart(2, '0')}`,
-    status: index === 3 ? 'YES' : 'No response',
+    sentAt: index < 4 ? `5:${String(9 + index * 10).padStart(2, '0')}` : 'waiting',
+    status: index === 3 ? 'YES' : index < 3 ? 'No response' : 'Waiting',
   }));
+}
+
+function findFirstYes(events: PingEvent[]) {
+  return events.find((event) => event.status === 'YES')?.candidateName;
 }
 
 export function TimeoutStoreProvider({ children }: { children: React.ReactNode }) {
@@ -124,6 +131,27 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
           )
         );
       },
+      confirmFirstYes: (requestId) => {
+        setRequests((current) =>
+          current.map((request) => {
+            if (request.id !== requestId || request.status !== 'active') return request;
+            const confirmedSitterName = findFirstYes(request.pingEvents) ?? request.candidates[0]?.name ?? 'Confirmed sitter';
+            return {
+              ...request,
+              status: 'confirmed',
+              confirmedSitterName,
+              pingEvents: request.pingEvents.map((event) =>
+                event.candidateName === confirmedSitterName
+                  ? { ...event, status: 'YES' as const }
+                  : event.status === 'Waiting'
+                    ? { ...event, status: 'Filled' as const }
+                    : event
+              ),
+            };
+          })
+        );
+      },
+      resetMockRequests: () => setRequests([]),
     }),
     [activeRequest, requests]
   );
