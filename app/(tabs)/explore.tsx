@@ -4,7 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CancellationScope, useTimeoutStore } from '@/components/timeout-store';
 import {
   buildConfirmationMessage,
+  buildEmergencyConfirmationMessage,
+  buildEmergencyEndSitMessage,
   buildEmergencyPickupMessage,
+  buildPickupCompleteMessage,
+  buildPointsSettledMessage,
   buildReminderMessage,
   buildSitRequestMessage,
 } from '@/constants/timeout-rules';
@@ -14,7 +18,17 @@ function isGroupActivity(presetKey?: string) {
 }
 
 export default function PingStatusScreen() {
-  const { activeRequest, cancelActiveRequest, cancelRequest, resetMockRequests, requests, simulateFirstYes } = useTimeoutStore();
+  const {
+    activeRequest,
+    cancelActiveRequest,
+    cancelRequest,
+    endSit,
+    markPickupComplete,
+    resetMockRequests,
+    requests,
+    settlePoints,
+    simulateFirstYes,
+  } = useTimeoutStore();
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const displayRequest = activeRequest ?? requests[0] ?? null;
   const pingEvents = displayRequest?.pingEvents ?? [];
@@ -26,7 +40,9 @@ export default function PingStatusScreen() {
 
     const base = {
       requesterName: 'Sara',
+      requesterPhone: '(555) 013-1200',
       sitterName: displayRequest.confirmedSitterName,
+      sitterPhone: displayRequest.confirmedSitterPhone,
       title: displayRequest.title,
       dateLabel: displayRequest.dateLabel,
       startTime: displayRequest.startTime,
@@ -35,9 +51,36 @@ export default function PingStatusScreen() {
       locationLabel: displayRequest.locationLabel,
       pickupLocation: displayRequest.comments.match(/Pickup location: (.*)/)?.[1],
       confirmedPhone: displayRequest.confirmedSitterPhone,
+      handoffNote: displayRequest.confirmedSitterAddress,
+      points: 10,
     };
 
     const requestMessage = isEmergency ? buildEmergencyPickupMessage(base) : buildSitRequestMessage(base);
+
+    if (isEmergency) {
+      if (['confirmed', 'pickup_complete', 'completed', 'points_settled'].includes(displayRequest.status)) {
+        const previews = [
+          { title: 'Emergency broadcast', body: requestMessage },
+          { title: 'Emergency confirmation to both parties', body: buildEmergencyConfirmationMessage(base) },
+        ];
+
+        if (['pickup_complete', 'completed', 'points_settled'].includes(displayRequest.status)) {
+          previews.push({ title: 'Pickup completed update', body: buildPickupCompleteMessage(base) });
+        }
+
+        if (['completed', 'points_settled'].includes(displayRequest.status)) {
+          previews.push({ title: 'Requester arrived / sit ended', body: buildEmergencyEndSitMessage(base) });
+        }
+
+        if (displayRequest.status === 'points_settled') {
+          previews.push({ title: 'Points settled', body: buildPointsSettledMessage(base) });
+        }
+
+        return previews;
+      }
+
+      return [{ title: 'Emergency broadcast', body: requestMessage }];
+    }
 
     if (displayRequest.status === 'confirmed') {
       return [
@@ -109,12 +152,23 @@ export default function PingStatusScreen() {
               </View>
             ) : null}
 
-            {displayRequest.status === 'confirmed' ? (
+            {displayRequest.status === 'confirmed' && !isEmergency ? (
               <View style={styles.confirmationBox}>
                 <Text style={styles.confirmationTitle}>Sit confirmed</Text>
                 <Text style={styles.confirmationText}>Confirmation goes to requester and sitter. Other candidates receive a polite filled message. Reminder schedule: 24 hours and 2 hours before start.</Text>
                 {displayRequest.confirmedSitterPhone ? <Text style={styles.confirmationText}>Phone from YES response: {displayRequest.confirmedSitterPhone}</Text> : null}
                 {displayRequest.confirmedSitterAddress ? <Text style={styles.confirmationText}>Handoff/address note: {displayRequest.confirmedSitterAddress}</Text> : null}
+              </View>
+            ) : null}
+
+            {isEmergency && ['confirmed', 'pickup_complete', 'completed', 'points_settled'].includes(displayRequest.status) ? (
+              <View style={styles.confirmationBox}>
+                <Text style={styles.confirmationTitle}>Emergency pickup sequence</Text>
+                <Text style={styles.confirmationText}>Confirmation goes to both parties with names, phone numbers, pickup data, and handoff details.</Text>
+                {displayRequest.status === 'confirmed' ? <Text style={styles.confirmationText}>Next: sitter presses after pickup is completed.</Text> : null}
+                {displayRequest.status === 'pickup_complete' ? <Text style={styles.confirmationText}>Pickup completed. Both parties are notified. Next: press when requester arrives and the sit ends.</Text> : null}
+                {displayRequest.status === 'completed' ? <Text style={styles.confirmationText}>Sit ended. Next: settle points.</Text> : null}
+                {displayRequest.status === 'points_settled' ? <Text style={styles.confirmationText}>Points settled. Emergency pickup loop is complete.</Text> : null}
               </View>
             ) : null}
 
@@ -127,6 +181,24 @@ export default function PingStatusScreen() {
                   <Text style={styles.secondaryText}>Cancel AutoPing</Text>
                 </Pressable>
               </View>
+            ) : null}
+
+            {isEmergency && displayRequest.status === 'confirmed' ? (
+              <Pressable style={styles.primaryButtonNoMargin} onPress={() => markPickupComplete(displayRequest.id)}>
+                <Text style={styles.primaryText}>Sitter: Pickup Completed</Text>
+              </Pressable>
+            ) : null}
+
+            {isEmergency && displayRequest.status === 'pickup_complete' ? (
+              <Pressable style={styles.primaryButtonNoMargin} onPress={() => endSit(displayRequest.id)}>
+                <Text style={styles.primaryText}>Requester Arrived / End Sit</Text>
+              </Pressable>
+            ) : null}
+
+            {isEmergency && displayRequest.status === 'completed' ? (
+              <Pressable style={styles.primaryButtonNoMargin} onPress={() => settlePoints(displayRequest.id)}>
+                <Text style={styles.primaryText}>Settle Points</Text>
+              </Pressable>
             ) : null}
           </>
         ) : (
@@ -150,10 +222,10 @@ export default function PingStatusScreen() {
         </View>
       ) : null}
 
-      {displayRequest && (displayRequest.status === 'active' || displayRequest.status === 'confirmed') ? (
+      {displayRequest && (displayRequest.status === 'active' || displayRequest.status === 'confirmed' || displayRequest.status === 'pickup_complete') ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cancel from notification</Text>
-          <Text style={styles.helperText}>Every confirmation and reminder should include a cancel path. V1 prefers cancel-and-reping over editing an active request.</Text>
+          <Text style={styles.helperText}>Every confirmation and relevant notification should include a cancel path. V1 prefers cancel-and-reping over editing an active request.</Text>
           <Pressable style={styles.secondaryFullButton} onPress={() => setShowCancelOptions(!showCancelOptions)}>
             <Text style={styles.secondaryText}>{showCancelOptions ? 'Hide Cancel Options' : 'Show Cancel Options'}</Text>
           </Pressable>
@@ -229,9 +301,9 @@ export default function PingStatusScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Reminder rules</Text>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>1</Text><Text style={styles.ruleText}>Send confirmation after first YES.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>2</Text><Text style={styles.ruleText}>Reminder at 24 hours includes a cancel option.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>Reminder at 2 hours includes a cancel option.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>1</Text><Text style={styles.ruleText}>Normal sits get 24-hour and 2-hour reminders.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>2</Text><Text style={styles.ruleText}>Emergency pickup skips advance reminders and uses completion actions.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>Every relevant confirmation/reminder/update includes a cancel path.</Text></View>
         <View style={styles.ruleRow}><Text style={styles.ruleDot}>4</Text><Text style={styles.ruleText}>For playdates/gatherings, cancellation scope must be explicit.</Text></View>
       </View>
     </ScrollView>
@@ -247,6 +319,7 @@ const styles = StyleSheet.create({
   tagline: { color: '#ffeaf7', fontSize: 16, marginTop: 8, lineHeight: 22 },
   section: { backgroundColor: 'white', borderRadius: 22, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#f0d8e7' },
   primaryButton: { backgroundColor: '#8b2bbf', padding: 16, borderRadius: 18, alignItems: 'center', marginBottom: 16 },
+  primaryButtonNoMargin: { backgroundColor: '#8b2bbf', padding: 16, borderRadius: 18, alignItems: 'center', marginTop: 14 },
   primaryText: { color: 'white', fontWeight: '900', fontSize: 16, textAlign: 'center' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   primaryHalfButton: { flex: 1, backgroundColor: '#8b2bbf', padding: 14, borderRadius: 16, alignItems: 'center' },
