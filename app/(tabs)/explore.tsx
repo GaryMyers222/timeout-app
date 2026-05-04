@@ -1,19 +1,13 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const PING_STATUS = [
-  { name: 'User A', sent: '5:09', status: 'No response' },
-  { name: 'User B', sent: '5:19', status: 'No response' },
-  { name: 'User C', sent: '5:29', status: 'No response' },
-  { name: 'User D', sent: '5:33', status: 'YES' },
-];
-
-const ACTIVE_REQUESTS = [
-  { title: 'Friday Date + Dinner', detail: 'Tonight, 8:00 PM • My Place • 18 points' },
-  { title: 'Past Sit Entry', detail: 'Yesterday, 2 hours • posts directly to ledger' },
-];
+import { useTimeoutStore } from '@/components/timeout-store';
 
 export default function PingStatusScreen() {
+  const { activeRequest, cancelActiveRequest, requests } = useTimeoutStore();
+  const displayRequest = activeRequest ?? requests[0] ?? null;
+  const pingEvents = displayRequest?.pingEvents ?? [];
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
@@ -23,33 +17,70 @@ export default function PingStatusScreen() {
       </View>
 
       <View style={styles.section}>
+        {displayRequest ? (
+          <>
+            <Text style={styles.sectionTitle}>{displayRequest.title}</Text>
+            <Text style={styles.helperText}>
+              {displayRequest.dateLabel} • {displayRequest.startTime} • {displayRequest.duration} hours • {displayRequest.locationLabel}
+            </Text>
+            <View style={styles.statusPill}>
+              <Text style={styles.statusText}>{displayRequest.status.replace('_', ' ')}</Text>
+            </View>
+            {displayRequest.status === 'active' ? (
+              <Pressable style={styles.secondaryButton} onPress={cancelActiveRequest}>
+                <Text style={styles.secondaryText}>Cancel Active AutoPing</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>No active request yet</Text>
+            <Text style={styles.helperText}>Create a preset or custom sit request from the Request tab.</Text>
+          </>
+        )}
+      </View>
+
+      <View style={styles.section}>
         <Pressable style={styles.primaryButton}>
           <Text style={styles.primaryText}>Refresh Ping Status</Text>
         </Pressable>
-        <Text style={styles.sectionTitle}>Sit Request • Today • 8:00 PM</Text>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, styles.nameCell]}>Contact</Text>
-          <Text style={styles.headerCell}>Sent</Text>
-          <Text style={styles.headerCell}>Status</Text>
-        </View>
-        {PING_STATUS.map((row) => (
-          <View key={row.name} style={styles.tableRow}>
-            <Text style={[styles.cell, styles.nameCell]}>{row.name}</Text>
-            <Text style={styles.cell}>{row.sent}</Text>
-            <Text style={[styles.cell, row.status === 'YES' && styles.yes]}>{row.status}</Text>
-          </View>
-        ))}
+        <Text style={styles.sectionTitle}>Ping progress</Text>
+        {pingEvents.length > 0 ? (
+          <>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.headerCell, styles.nameCell]}>Contact</Text>
+              <Text style={styles.headerCell}>Sent</Text>
+              <Text style={styles.headerCell}>Status</Text>
+            </View>
+            {pingEvents.map((row) => (
+              <View key={`${row.candidateName}-${row.sentAt}`} style={styles.tableRow}>
+                <Text style={[styles.cell, styles.nameCell]}>{row.candidateName}</Text>
+                <Text style={styles.cell}>{row.sentAt}</Text>
+                <Text style={[styles.cell, row.status === 'YES' && styles.yes]}>{row.status}</Text>
+              </View>
+            ))}
+          </>
+        ) : (
+          <Text style={styles.helperText}>Past sits and disabled AutoPing entries have no ping progress.</Text>
+        )}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Active and recent requests</Text>
         <Text style={styles.helperText}>V1 allows one active AutoPing per day. Same-day conflicts should ask the requester to wait or cancel and continue.</Text>
-        {ACTIVE_REQUESTS.map((request) => (
-          <View key={request.title} style={styles.requestCard}>
-            <Text style={styles.requestTitle}>{request.title}</Text>
-            <Text style={styles.requestDetail}>{request.detail}</Text>
+        {requests.length > 0 ? (
+          requests.map((request) => (
+            <View key={request.id} style={styles.requestCard}>
+              <Text style={styles.requestTitle}>{request.title}</Text>
+              <Text style={styles.requestDetail}>{request.dateLabel} • {request.startTime} • {request.status.replace('_', ' ')}</Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.requestCard}>
+            <Text style={styles.requestTitle}>No requests yet</Text>
+            <Text style={styles.requestDetail}>Your test requests will appear here after you tap Start AutoPing.</Text>
           </View>
-        ))}
+        )}
       </View>
 
       <View style={styles.section}>
@@ -73,8 +104,12 @@ const styles = StyleSheet.create({
   section: { backgroundColor: 'white', borderRadius: 22, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#f0d8e7' },
   primaryButton: { backgroundColor: '#8b2bbf', padding: 16, borderRadius: 18, alignItems: 'center', marginBottom: 16 },
   primaryText: { color: 'white', fontWeight: '900', fontSize: 17 },
+  secondaryButton: { backgroundColor: '#fff0f7', borderColor: '#e3bfd6', borderWidth: 1, padding: 14, borderRadius: 16, alignItems: 'center', marginTop: 12 },
+  secondaryText: { color: '#8b2bbf', fontWeight: '900' },
   sectionTitle: { fontSize: 21, fontWeight: '900', color: '#372333', marginBottom: 8 },
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
+  statusPill: { alignSelf: 'flex-start', backgroundColor: '#f4e6ff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  statusText: { color: '#8b2bbf', fontWeight: '900', textTransform: 'uppercase' },
   tableHeader: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#e3bfd6', paddingBottom: 8 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0d8e7', paddingVertical: 12 },
   headerCell: { flex: 1, color: '#76566a', fontWeight: '900' },
