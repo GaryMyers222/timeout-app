@@ -45,6 +45,19 @@ export type TimeoutPreset = {
   emergency?: boolean;
 };
 
+export type NotificationPreviewInput = {
+  requesterName: string;
+  sitterName?: string;
+  title: string;
+  dateLabel: string;
+  startTime: string;
+  duration: string;
+  kidsLabel: string;
+  locationLabel: string;
+  pickupLocation?: string;
+  confirmedPhone?: string;
+};
+
 export const POINTS_PER_HOUR = 4;
 export const TWO_PLUS_CHILDREN_BONUS = 4;
 export const MY_PLACE_BONUS = 4;
@@ -69,6 +82,22 @@ export function durationToHours(durationHour: string, durationMinute: string) {
   const hours = Number(durationHour) || 0;
   const minutes = Number(durationMinute.replace(':', '')) || 0;
   return hours + minutes / 60;
+}
+
+export function buildSitRequestMessage(input: NotificationPreviewInput) {
+  return `${input.requesterName} sent you a TimeOut sit request.\n\n${input.dateLabel} ${input.startTime} for ${input.duration} hours.\n${input.kidsLabel} - ${input.locationLabel}.\n\nReply YES if you can help.`;
+}
+
+export function buildEmergencyPickupMessage(input: NotificationPreviewInput) {
+  return `${input.requesterName} needs emergency daycare pickup.\n\nLocation: ${input.pickupLocation || 'pickup location pending'}\nPickup: ${input.startTime}\n\nReply YES if you can help.`;
+}
+
+export function buildConfirmationMessage(input: NotificationPreviewInput) {
+  return `TimeOut sit confirmed.\n\nRequester: ${input.requesterName}\nSitter: ${input.sitterName || 'confirmed sitter'}\n${input.dateLabel} ${input.startTime}\n${input.confirmedPhone ? `Phone: ${input.confirmedPhone}\n` : ''}\nReminder: cancel if plans change.`;
+}
+
+export function buildReminderMessage(input: NotificationPreviewInput, timing: '24 hours' | '2 hours') {
+  return `Reminder: ${input.requesterName} and ${input.sitterName || 'your sitter'} have a TimeOut sit in ${timing}.\n\n${input.dateLabel} ${input.startTime}\nCancel if plans changed.`;
 }
 
 export const TIMEOUT_PRESETS: TimeoutPreset[] = [
