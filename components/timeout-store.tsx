@@ -17,6 +17,8 @@ export type PingEvent = {
   responderAddress?: string;
 };
 
+export type CancellationScope = 'sit' | 'my_participation' | 'entire_activity';
+
 export type SitRequest = {
   id: string;
   presetKey: SitPresetKey;
@@ -34,17 +36,20 @@ export type SitRequest = {
   confirmedSitterName?: string;
   confirmedSitterPhone?: string;
   confirmedSitterAddress?: string;
+  cancellationScope?: CancellationScope;
+  cancellationNote?: string;
   candidates: Candidate[];
   pingEvents: PingEvent[];
 };
 
-type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress'>;
+type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress' | 'cancellationScope' | 'cancellationNote'>;
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
   activeRequest: SitRequest | null;
   createRequest: (input: CreateSitRequestInput) => SitRequest;
   cancelActiveRequest: () => void;
+  cancelRequest: (requestId: string, scope: CancellationScope, note: string) => void;
   simulateFirstYes: (requestId: string) => void;
   resetMockRequests: () => void;
 };
@@ -135,7 +140,18 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
       cancelActiveRequest: () => {
         setRequests((current) =>
           current.map((request) =>
-            request.status === 'active' ? { ...request, status: 'cancelled' as const } : request
+            request.status === 'active'
+              ? { ...request, status: 'cancelled' as const, cancellationScope: 'sit', cancellationNote: 'Requester cancelled active AutoPing.' }
+              : request
+          )
+        );
+      },
+      cancelRequest: (requestId, scope, note) => {
+        setRequests((current) =>
+          current.map((request) =>
+            request.id === requestId
+              ? { ...request, status: 'cancelled' as const, cancellationScope: scope, cancellationNote: note }
+              : request
           )
         );
       },
