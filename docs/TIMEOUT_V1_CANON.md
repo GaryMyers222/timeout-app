@@ -111,6 +111,17 @@ Defer from V1:
 - First YES triggers confirmation to requester and sitter, and the system sends polite filled messages to remaining candidates.
 - Emergency Daycare Pickup is the main edge case where the first YES should be able to provide phone/handoff details as part of the response.
 
+### Emergency Daycare Pickup Completion
+
+- Emergency Daycare Pickup does not need normal 24-hour or 2-hour advance reminders.
+- After first YES, the system should send confirmation to both requester and sitter.
+- Emergency confirmation should include both party names, both party phone numbers where available, pickup data, and handoff details.
+- The sitter should receive an action: press when pickup is completed.
+- When pickup is marked complete, the system should notify both parties so the requester knows the child was picked up.
+- After pickup completion, both parties should receive an action: press when requester arrives / sit ends.
+- When the sit ends, the system settles points.
+- Emergency Daycare Pickup still uses the +6 emergency bonus on top of normal point calculation unless later changed in canon.
+
 ### Candidate Ordering
 
 - Sort candidates with the lowest point balance first.
@@ -156,12 +167,13 @@ Defer from V1:
 
 ### Reminders
 
-- Reminder timing is 24 hours before sit start and 2 hours before sit start.
+- Reminder timing is 24 hours before sit start and 2 hours before sit start for normal scheduled sits.
 - Reminder notifications must include a cancel option.
 - Both requester and sitter may cancel before points are posted.
 - Reminder and confirmation notifications should support direct action without unnecessary navigation.
 - Cancellation from a reminder should clearly state what will be cancelled and who will be notified.
 - For group/broadcast activities such as playdate or gathering RSVP, reminder cancellation must distinguish between cancelling one's own participation and cancelling the entire activity.
+- Emergency Daycare Pickup uses a different completion sequence and does not require normal advance reminders.
 
 ## Invite / Startup Path
 
