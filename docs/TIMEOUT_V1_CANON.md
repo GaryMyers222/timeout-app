@@ -113,14 +113,21 @@ Defer from V1:
 
 ### Emergency Daycare Pickup Completion
 
-- Emergency Daycare Pickup does not need normal 24-hour or 2-hour advance reminders.
+- Emergency Daycare Pickup is immediate by default: ASAP, with standard expectation of pickup within about one hour.
+- The requester may specify a later pickup time only as an edge case.
+- Emergency Daycare Pickup does not need normal 24-hour or 2-hour advance reminders because it is not a planned future sit.
 - After first YES, the system should send confirmation to both requester and sitter.
 - Emergency confirmation should include both party names, both party phone numbers where available, pickup data, and handoff details.
-- The sitter should receive an action: press when pickup is completed.
+- The YES response should ask the sitter for the best phone number for handoff if the app does not already have it.
+- The sitter should receive an action: press when pickup is completed at the daycare/school.
 - When pickup is marked complete, the system should notify both parties so the requester knows the child was picked up.
-- After pickup completion, both parties should receive an action: press when requester arrives / sit ends.
+- After pickup completion, both parties should receive an action: press when requester arrives / sit ends, or enter end-of-sit time.
 - When the sit ends, the system settles points.
-- Emergency Daycare Pickup still uses the +6 emergency bonus on top of normal point calculation unless later changed in canon.
+- Emergency pickup points should be split into two parts:
+  - +6 emergency bonus covers the urgent interval from first YES to daycare/school pickup.
+  - normal sitter points apply from daycare/school pickup to requester arrival / end of sit.
+- Emergency workflow requires timestamps for first YES, daycare/school pickup complete, requester arrival / end sit, and points settled.
+- SMS/push should remain message-first: small message, simple action, no requirement to open the app unless needed.
 
 ### Candidate Ordering
 
