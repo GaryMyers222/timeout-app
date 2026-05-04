@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CancellationScope, useTimeoutStore } from '@/components/timeout-store';
+import {
+  buildConfirmationMessage,
+  buildEmergencyPickupMessage,
+  buildReminderMessage,
+  buildSitRequestMessage,
+} from '@/constants/timeout-rules';
 
 function isGroupActivity(presetKey?: string) {
   return presetKey === 'playdate' || presetKey === 'gathering-rsvp';
@@ -14,6 +20,36 @@ export default function PingStatusScreen() {
   const pingEvents = displayRequest?.pingEvents ?? [];
   const isEmergency = displayRequest?.presetKey === 'emergency-daycare-pickup';
   const isGroup = isGroupActivity(displayRequest?.presetKey);
+
+  const notificationPreviews = useMemo(() => {
+    if (!displayRequest) return [];
+
+    const base = {
+      requesterName: 'Sara',
+      sitterName: displayRequest.confirmedSitterName,
+      title: displayRequest.title,
+      dateLabel: displayRequest.dateLabel,
+      startTime: displayRequest.startTime,
+      duration: displayRequest.duration,
+      kidsLabel: displayRequest.kidsLabel,
+      locationLabel: displayRequest.locationLabel,
+      pickupLocation: displayRequest.comments.match(/Pickup location: (.*)/)?.[1],
+      confirmedPhone: displayRequest.confirmedSitterPhone,
+    };
+
+    const requestMessage = isEmergency ? buildEmergencyPickupMessage(base) : buildSitRequestMessage(base);
+
+    if (displayRequest.status === 'confirmed') {
+      return [
+        { title: 'Original request', body: requestMessage },
+        { title: 'Confirmation', body: buildConfirmationMessage(base) },
+        { title: '24-hour reminder', body: buildReminderMessage(base, '24 hours') },
+        { title: '2-hour reminder', body: buildReminderMessage(base, '2 hours') },
+      ];
+    }
+
+    return [{ title: 'Outgoing ping', body: requestMessage }];
+  }, [displayRequest, isEmergency]);
 
   function handleCancel(scope: CancellationScope) {
     if (!displayRequest) return;
@@ -100,6 +136,19 @@ export default function PingStatusScreen() {
           </>
         )}
       </View>
+
+      {displayRequest && notificationPreviews.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notification previews</Text>
+          <Text style={styles.helperText}>Messages stay short, glanceable, and action-oriented.</Text>
+          {notificationPreviews.map((preview) => (
+            <View key={preview.title} style={styles.messageCard}>
+              <Text style={styles.messageTitle}>{preview.title}</Text>
+              <Text style={styles.messageBody}>{preview.body}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {displayRequest && (displayRequest.status === 'active' || displayRequest.status === 'confirmed') ? (
         <View style={styles.section}>
@@ -226,6 +275,9 @@ const styles = StyleSheet.create({
   optionActionText: { color: '#8b2bbf', fontWeight: '900', textAlign: 'center' },
   dangerAction: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 8 },
   dangerActionText: { color: '#9a1f1f', fontWeight: '900', textAlign: 'center' },
+  messageCard: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 10 },
+  messageTitle: { color: '#372333', fontWeight: '900', marginBottom: 6 },
+  messageBody: { color: '#52364b', lineHeight: 20, whiteSpace: 'pre-wrap' },
   tableHeader: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#e3bfd6', paddingBottom: 8 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0d8e7', paddingVertical: 12 },
   headerCell: { flex: 1, color: '#76566a', fontWeight: '900' },
