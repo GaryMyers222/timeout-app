@@ -1,13 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { useTimeoutStore } from '@/components/timeout-store';
+import { CancellationScope, useTimeoutStore } from '@/components/timeout-store';
+
+function isGroupActivity(presetKey?: string) {
+  return presetKey === 'playdate' || presetKey === 'gathering-rsvp';
+}
 
 export default function PingStatusScreen() {
-  const { activeRequest, cancelActiveRequest, resetMockRequests, requests, simulateFirstYes } = useTimeoutStore();
+  const { activeRequest, cancelActiveRequest, cancelRequest, resetMockRequests, requests, simulateFirstYes } = useTimeoutStore();
+  const [showCancelOptions, setShowCancelOptions] = useState(false);
   const displayRequest = activeRequest ?? requests[0] ?? null;
   const pingEvents = displayRequest?.pingEvents ?? [];
   const isEmergency = displayRequest?.presetKey === 'emergency-daycare-pickup';
+  const isGroup = isGroupActivity(displayRequest?.presetKey);
+
+  function handleCancel(scope: CancellationScope) {
+    if (!displayRequest) return;
+    const note =
+      scope === 'entire_activity'
+        ? 'Host/facilitator cancelled the entire group activity.'
+        : scope === 'my_participation'
+          ? 'User cancelled only their own participation.'
+          : 'Requester or sitter cancelled this sit; quick reping is preferred over editing.';
+    cancelRequest(displayRequest.id, scope, note);
+    setShowCancelOptions(false);
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -34,6 +52,14 @@ export default function PingStatusScreen() {
                 </View>
               ) : null}
             </View>
+
+            {displayRequest.status === 'cancelled' ? (
+              <View style={styles.cancelledBox}>
+                <Text style={styles.cancelledTitle}>Cancellation recorded</Text>
+                <Text style={styles.cancelledText}>Scope: {displayRequest.cancellationScope?.replace('_', ' ') ?? 'sit'}</Text>
+                {displayRequest.cancellationNote ? <Text style={styles.cancelledText}>{displayRequest.cancellationNote}</Text> : null}
+              </View>
+            ) : null}
 
             {displayRequest.status === 'active' ? (
               <View style={styles.waitingBox}>
@@ -74,6 +100,35 @@ export default function PingStatusScreen() {
           </>
         )}
       </View>
+
+      {displayRequest && (displayRequest.status === 'active' || displayRequest.status === 'confirmed') ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cancel from notification</Text>
+          <Text style={styles.helperText}>Every confirmation and reminder should include a cancel path. V1 prefers cancel-and-reping over editing an active request.</Text>
+          <Pressable style={styles.secondaryFullButton} onPress={() => setShowCancelOptions(!showCancelOptions)}>
+            <Text style={styles.secondaryText}>{showCancelOptions ? 'Hide Cancel Options' : 'Show Cancel Options'}</Text>
+          </Pressable>
+          {showCancelOptions ? (
+            <View style={styles.cancelOptionsBox}>
+              {isGroup ? (
+                <>
+                  <Text style={styles.warningText}>Group activity: avoid accidentally cancelling for everyone.</Text>
+                  <Pressable style={styles.optionAction} onPress={() => handleCancel('my_participation')}>
+                    <Text style={styles.optionActionText}>Cancel only my participation</Text>
+                  </Pressable>
+                  <Pressable style={styles.dangerAction} onPress={() => handleCancel('entire_activity')}>
+                    <Text style={styles.dangerActionText}>Host only: cancel entire activity</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable style={styles.dangerAction} onPress={() => handleCancel('sit')}>
+                  <Text style={styles.dangerActionText}>Cancel this sit and notify both parties</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <Pressable style={styles.primaryButton}>
@@ -126,9 +181,9 @@ export default function PingStatusScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Reminder rules</Text>
         <View style={styles.ruleRow}><Text style={styles.ruleDot}>1</Text><Text style={styles.ruleText}>Send confirmation after first YES.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>2</Text><Text style={styles.ruleText}>Send reminder 24 hours before sit start.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>Send reminder 2 hours before sit start.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>4</Text><Text style={styles.ruleText}>Both requester and sitter may cancel before points post.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>2</Text><Text style={styles.ruleText}>Reminder at 24 hours includes a cancel option.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>Reminder at 2 hours includes a cancel option.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>4</Text><Text style={styles.ruleText}>For playdates/gatherings, cancellation scope must be explicit.</Text></View>
       </View>
     </ScrollView>
   );
@@ -147,6 +202,7 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   primaryHalfButton: { flex: 1, backgroundColor: '#8b2bbf', padding: 14, borderRadius: 16, alignItems: 'center' },
   secondaryHalfButton: { flex: 1, backgroundColor: '#fff0f7', borderColor: '#e3bfd6', borderWidth: 1, padding: 14, borderRadius: 16, alignItems: 'center' },
+  secondaryFullButton: { backgroundColor: '#fff0f7', borderColor: '#e3bfd6', borderWidth: 1, padding: 14, borderRadius: 16, alignItems: 'center' },
   secondaryText: { color: '#8b2bbf', fontWeight: '900', textAlign: 'center' },
   sectionTitle: { fontSize: 21, fontWeight: '900', color: '#372333', marginBottom: 8 },
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
@@ -161,6 +217,15 @@ const styles = StyleSheet.create({
   confirmationBox: { backgroundColor: '#f2fff7', borderColor: '#b8e8c8', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
   confirmationTitle: { color: '#20894d', fontWeight: '900', fontSize: 16, marginBottom: 4 },
   confirmationText: { color: '#35634a', lineHeight: 20, marginTop: 4 },
+  cancelledBox: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
+  cancelledTitle: { color: '#9a1f1f', fontWeight: '900', fontSize: 16, marginBottom: 4 },
+  cancelledText: { color: '#9a1f1f', lineHeight: 20, marginTop: 4 },
+  cancelOptionsBox: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 12 },
+  warningText: { color: '#9a1f1f', fontWeight: '800', lineHeight: 20, marginBottom: 10 },
+  optionAction: { backgroundColor: '#f4e6ff', borderRadius: 16, padding: 14, marginTop: 8 },
+  optionActionText: { color: '#8b2bbf', fontWeight: '900', textAlign: 'center' },
+  dangerAction: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 8 },
+  dangerActionText: { color: '#9a1f1f', fontWeight: '900', textAlign: 'center' },
   tableHeader: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#e3bfd6', paddingBottom: 8 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0d8e7', paddingVertical: 12 },
   headerCell: { flex: 1, color: '#76566a', fontWeight: '900' },
