@@ -1,15 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useTimeoutStore } from '@/components/timeout-store';
 import {
@@ -35,7 +27,6 @@ const customPreset = {
   durationMinute: ':00',
   location: 'Drop-off' as LocationType,
   kidCount: '1 Child' as KidCount,
-  emergency: false,
 };
 
 type PickupTiming = 'ASAP' | 'Specific time';
@@ -53,16 +44,16 @@ export default function CreateSitRequestScreen() {
   const router = useRouter();
   const { preset } = useLocalSearchParams<{ preset?: SitPresetKey }>();
   const { activeRequest, cancelActiveRequest, createRequest } = useTimeoutStore();
+
   const selectedPresetKey: SitPresetKey = preset && PRESET_BY_KEY[preset] ? preset : 'custom';
   const selectedPreset = selectedPresetKey === 'custom' ? customPreset : PRESET_BY_KEY[selectedPresetKey];
+  const isEmergency = selectedPresetKey === 'emergency-daycare-pickup';
 
   const [selectedHour, setSelectedHour] = useState(selectedPreset.startHour);
   const [selectedMinute, setSelectedMinute] = useState(normalizeMinute(selectedPreset.startMinute));
   const [selectedMeridiem, setSelectedMeridiem] = useState<'AM' | 'PM'>(selectedPreset.ampm);
-
   const [selectedDurationHour, setSelectedDurationHour] = useState(selectedPreset.durationHour);
   const [selectedDurationMinute, setSelectedDurationMinute] = useState(normalizeMinute(selectedPreset.durationMinute));
-
   const [selectedKids, setSelectedKids] = useState<KidCount>(selectedPreset.kidCount);
   const [selectedLocation, setSelectedLocation] = useState<LocationType>(selectedPreset.location);
   const [dateLabel, setDateLabel] = useState(selectedPresetKey === 'custom' ? 'Select date' : 'Today');
@@ -70,38 +61,31 @@ export default function CreateSitRequestScreen() {
   const [requestTitle, setRequestTitle] = useState(selectedPreset.title);
   const [autoPingMode, setAutoPingMode] = useState<AutoPingMode>(selectedPreset.autoPingMode);
   const [isPastSit, setIsPastSit] = useState(false);
+
   const [pickupTiming, setPickupTiming] = useState<PickupTiming>('ASAP');
   const [pickupLocation, setPickupLocation] = useState('');
   const [pickupContact, setPickupContact] = useState('');
   const [carSeatNeed, setCarSeatNeed] = useState<CarSeatNeed>('Unknown');
   const [handoffDetails, setHandoffDetails] = useState('');
   const [daycareDetails, setDaycareDetails] = useState('');
+  const [validationMessage, setValidationMessage] = useState('');
+  const [showEmergencyConfirm, setShowEmergencyConfirm] = useState(false);
 
   const hours = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   const minutes = ['00', '15', '30', '45'];
   const meridiems: Array<'AM' | 'PM'> = ['AM', 'PM'];
-  const isEmergency = selectedPresetKey === 'emergency-daycare-pickup';
 
-  const startTimeDisplay = useMemo(
-    () => `${selectedHour}:${selectedMinute} ${selectedMeridiem}`,
-    [selectedHour, selectedMinute, selectedMeridiem]
-  );
-
+  const startTimeDisplay = useMemo(() => `${selectedHour}:${selectedMinute} ${selectedMeridiem}`, [selectedHour, selectedMinute, selectedMeridiem]);
   const emergencyStartLabel = pickupTiming === 'ASAP' ? 'ASAP' : startTimeDisplay;
-
-  const durationDisplay = useMemo(
-    () => displayDuration(selectedDurationHour, selectedDurationMinute),
-    [selectedDurationHour, selectedDurationMinute]
-  );
+  const durationDisplay = useMemo(() => displayDuration(selectedDurationHour, selectedDurationMinute), [selectedDurationHour, selectedDurationMinute]);
 
   const pointBreakdown = useMemo(
-    () =>
-      calculateSitPoints({
-        durationHours: durationToHours(selectedDurationHour, selectedDurationMinute),
-        kidCount: selectedKids,
-        location: selectedLocation,
-        isEmergency,
-      }),
+    () => calculateSitPoints({
+      durationHours: durationToHours(selectedDurationHour, selectedDurationMinute),
+      kidCount: selectedKids,
+      location: selectedLocation,
+      isEmergency,
+    }),
     [isEmergency, selectedDurationHour, selectedDurationMinute, selectedKids, selectedLocation]
   );
 
@@ -124,109 +108,80 @@ export default function CreateSitRequestScreen() {
     setCarSeatNeed('Unknown');
     setHandoffDetails('');
     setDaycareDetails('');
+    setValidationMessage('');
+    setShowEmergencyConfirm(false);
   }, [selectedPresetKey]);
 
   const autoPingSummary = useMemo(() => {
-    if (isPastSit) {
-      return 'Past Sit Mode: requester-only entry, no AutoPing, immediate ledger posting.';
-    }
-
-    if (isEmergency) {
-      return 'Emergency broadcast: confirm details, then ping the circle immediately for the first YES.';
-    }
-
-    if (autoPingMode === 'broadcast') {
-      return 'Broadcast AutoPing: all candidates get pinged at once and the first YES wins.';
-    }
-
+    if (isPastSit) return 'Past Sit Mode: requester-only entry, no AutoPing, immediate ledger posting.';
+    if (isEmergency) return 'Emergency broadcast: collect pickup details, confirm, then ping the circle immediately for the first YES.';
+    if (autoPingMode === 'broadcast') return 'Broadcast AutoPing: all candidates get pinged at once and the first YES wins.';
     return 'Sequential AutoPing: candidates are contacted in debt-first order until the first YES.';
   }, [autoPingMode, isEmergency, isPastSit]);
 
-  const handleSubmit = () => {
-    if (!dateLabel.trim() || dateLabel === 'Select date') {
-      Alert.alert('Missing date', 'Add a date label so the request can be posted.');
+  function buildEmergencyDetails() {
+    return [
+      `Pickup timing: ${emergencyStartLabel}`,
+      `Pickup location: ${pickupLocation.trim()}`,
+      pickupContact.trim() ? `Pickup contact: ${pickupContact.trim()}` : '',
+      `Car seat: ${carSeatNeed}`,
+      handoffDetails.trim() ? `After-pickup / handoff: ${handoffDetails.trim()}` : '',
+      daycareDetails.trim() ? `Other details: ${daycareDetails.trim()}` : '',
+      'Requester must authorize pickup by the confirmed sitter name.',
+      'Members should keep native phone contacts updated for off-app calls and handoff details.',
+    ].filter(Boolean).join('\n');
+  }
+
+  function postRequest() {
+    const finalComments = isEmergency ? `${comments}\n${buildEmergencyDetails()}` : comments;
+    const nextRequest = createRequest({
+      presetKey: selectedPresetKey,
+      title: requestTitle,
+      dateLabel,
+      startTime: isEmergency ? emergencyStartLabel : startTimeDisplay,
+      duration: durationDisplay,
+      kidsLabel: selectedKids,
+      locationLabel: selectedLocation,
+      comments: finalComments,
+      isPastSit,
+      autoPingMode: isPastSit ? 'disabled' : autoPingMode,
+    });
+    router.replace({ pathname: '/explore', params: { requestId: nextRequest.id } });
+  }
+
+  function validateRequest() {
+    if (!dateLabel.trim() || dateLabel === 'Select date') return 'Add a date label so the request can be posted.';
+    if (isEmergency && !pickupLocation.trim()) return 'Add the daycare, school, or pickup location before broadcasting.';
+    return '';
+  }
+
+  function handleSubmit() {
+    const error = validateRequest();
+    if (error) {
+      setValidationMessage(error);
+      setShowEmergencyConfirm(false);
       return;
     }
 
-    if (isEmergency && !pickupLocation.trim()) {
-      Alert.alert('Pickup location needed', 'Add the daycare, school, or pickup location before broadcasting.');
-      return;
-    }
-
-    const emergencyDetails = isEmergency
-      ? [
-          `Pickup timing: ${emergencyStartLabel}`,
-          `Pickup location: ${pickupLocation.trim()}`,
-          pickupContact.trim() ? `Pickup contact: ${pickupContact.trim()}` : '',
-          `Car seat: ${carSeatNeed}`,
-          handoffDetails.trim() ? `After-pickup / handoff: ${handoffDetails.trim()}` : '',
-          daycareDetails.trim() ? `Other details: ${daycareDetails.trim()}` : '',
-          'Requester must authorize pickup by the confirmed sitter name.',
-          'Exchange phone/address details off app if needed.',
-        ]
-          .filter(Boolean)
-          .join('\n')
-      : '';
-
-    const finalComments = isEmergency
-      ? `${comments}\n${emergencyDetails}`
-      : comments;
-
-    const postRequest = () => {
-      const nextRequest = createRequest({
-        presetKey: selectedPresetKey,
-        title: requestTitle,
-        dateLabel,
-        startTime: isEmergency ? emergencyStartLabel : startTimeDisplay,
-        duration: durationDisplay,
-        kidsLabel: selectedKids,
-        locationLabel: selectedLocation,
-        comments: finalComments,
-        isPastSit,
-        autoPingMode: isPastSit ? 'disabled' : autoPingMode,
-      });
-      router.replace({ pathname: '/explore', params: { requestId: nextRequest.id } });
-    };
-
-    const confirmEmergency = () => {
-      Alert.alert(
-        'Broadcast emergency pickup?',
-        'This will ping the circle now. First YES wins. You still need to authorize pickup with the daycare/school and share any off-app phone or address details needed for handoff.',
-        [
-          { text: 'Review Again', style: 'cancel' },
-          { text: 'Broadcast Now', style: 'destructive', onPress: postRequest },
-        ]
-      );
-    };
+    setValidationMessage('');
 
     if (activeRequest && !isPastSit) {
-      Alert.alert(
-        'Active AutoPing today',
-        'Only one active AutoPing can run per day. Cancel the current one first or log this as a past sit.',
-        [
-          { text: 'Open Status', onPress: () => router.replace('/explore') },
-          {
-            text: 'Cancel & Post This One',
-            style: 'destructive',
-            onPress: () => {
-              cancelActiveRequest();
-              if (isEmergency) confirmEmergency();
-              else postRequest();
-            },
-          },
-          { text: 'Keep Current', style: 'cancel' },
-        ]
-      );
+      setValidationMessage('There is already an active AutoPing today. Cancel it from Status, or use Past Sit for an off-app sit.');
       return;
     }
 
-    if (isEmergency && !isPastSit) {
-      confirmEmergency();
+    if (isEmergency && !isPastSit && !showEmergencyConfirm) {
+      setShowEmergencyConfirm(true);
       return;
     }
 
     postRequest();
-  };
+  }
+
+  function cancelExistingAndPost() {
+    cancelActiveRequest();
+    postRequest();
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -241,12 +196,13 @@ export default function CreateSitRequestScreen() {
             </View>
           </View>
         </View>
-
         <View style={styles.infoCard}>
           <Text style={styles.infoCardLabel}>AUTOPING MODE</Text>
           <Text style={styles.infoCardText}>{autoPingSummary}</Text>
         </View>
       </View>
+
+      {validationMessage ? <View style={styles.errorBox}><Text style={styles.errorText}>{validationMessage}</Text></View> : null}
 
       <View style={styles.sectionCard}>
         <Text style={styles.label}>Request Title</Text>
@@ -275,42 +231,12 @@ export default function CreateSitRequestScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.label}>{isEmergency ? 'Pickup Time' : 'Start Time'}</Text>
           <Text style={styles.selectedValue}>Selected: {startTimeDisplay}</Text>
-
           <Text style={styles.gridSectionLabel}>Hour</Text>
-          <View style={styles.grid}>
-            {hours.map((hour) => (
-              <TouchableOpacity
-                key={`start-hour-${hour}`}
-                style={[styles.gridButton, selectedHour === hour ? styles.gridButtonSelected : null]}
-                onPress={() => setSelectedHour(hour)}>
-                <Text style={[styles.gridButtonText, selectedHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
+          <View style={styles.grid}>{hours.map((hour) => <GridButton key={hour} label={hour} selected={selectedHour === hour} onPress={() => setSelectedHour(hour)} />)}</View>
           <Text style={styles.gridSectionLabel}>Minute</Text>
-          <View style={styles.grid}>
-            {minutes.map((minute) => (
-              <TouchableOpacity
-                key={`start-minute-${minute}`}
-                style={[styles.gridButton, selectedMinute === minute ? styles.gridButtonSelected : null]}
-                onPress={() => setSelectedMinute(minute)}>
-                <Text style={[styles.gridButtonText, selectedMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
+          <View style={styles.grid}>{minutes.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={selectedMinute === minute} onPress={() => setSelectedMinute(minute)} />)}</View>
           <Text style={styles.gridSectionLabel}>AM / PM</Text>
-          <View style={styles.row}>
-            {meridiems.map((meridiem) => (
-              <TouchableOpacity
-                key={meridiem}
-                style={[styles.optionButton, selectedMeridiem === meridiem ? styles.optionButtonSelected : null]}
-                onPress={() => setSelectedMeridiem(meridiem)}>
-                <Text style={[styles.optionText, selectedMeridiem === meridiem ? styles.optionTextSelected : null]}>{meridiem}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <View style={styles.row}>{meridiems.map((meridiem) => <OptionButton key={meridiem} title={meridiem} selected={selectedMeridiem === meridiem} onPress={() => setSelectedMeridiem(meridiem)} />)}</View>
         </View>
       ) : null}
 
@@ -318,153 +244,91 @@ export default function CreateSitRequestScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.label}>Duration</Text>
           <Text style={styles.selectedValue}>Selected: {durationDisplay} hours</Text>
-
           <Text style={styles.gridSectionLabel}>Hours</Text>
-          <View style={styles.grid}>
-            {hours.map((hour) => (
-              <TouchableOpacity
-                key={`duration-hour-${hour}`}
-                style={[styles.gridButton, selectedDurationHour === hour ? styles.gridButtonSelected : null]}
-                onPress={() => setSelectedDurationHour(hour)}>
-                <Text style={[styles.gridButtonText, selectedDurationHour === hour ? styles.gridButtonTextSelected : null]}>{hour}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
+          <View style={styles.grid}>{hours.map((hour) => <GridButton key={hour} label={hour} selected={selectedDurationHour === hour} onPress={() => setSelectedDurationHour(hour)} />)}</View>
           <Text style={styles.gridSectionLabel}>Minutes</Text>
-          <View style={styles.grid}>
-            {minutes.map((minute) => (
-              <TouchableOpacity
-                key={`duration-minute-${minute}`}
-                style={[styles.gridButton, selectedDurationMinute === minute ? styles.gridButtonSelected : null]}
-                onPress={() => setSelectedDurationMinute(minute)}>
-                <Text style={[styles.gridButtonText, selectedDurationMinute === minute ? styles.gridButtonTextSelected : null]}>:{minute}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <View style={styles.grid}>{minutes.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={selectedDurationMinute === minute} onPress={() => setSelectedDurationMinute(minute)} />)}</View>
         </View>
       ) : null}
 
       {isEmergency ? (
         <View style={styles.sectionCard}>
           <Text style={styles.label}>Pickup Information</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Daycare or school name and location"
-            value={pickupLocation}
-            onChangeText={setPickupLocation}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Pickup contact / front desk phone / teacher name"
-            value={pickupContact}
-            onChangeText={setPickupContact}
-          />
+          <TextInput style={styles.input} placeholder="Daycare or school name and location" value={pickupLocation} onChangeText={setPickupLocation} />
+          <TextInput style={styles.input} placeholder="Pickup contact / front desk phone / teacher name" value={pickupContact} onChangeText={setPickupContact} />
           <Text style={styles.gridSectionLabel}>Car seat</Text>
-          <View style={styles.row}>
-            {(['Unknown', 'Needed', 'Not needed'] as CarSeatNeed[]).map((need) => (
-              <TouchableOpacity key={need} style={[styles.optionButton, carSeatNeed === need ? styles.optionButtonSelected : null]} onPress={() => setCarSeatNeed(need)}>
-                <Text style={[styles.optionText, carSeatNeed === need ? styles.optionTextSelected : null]}>{need}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            style={[styles.input, styles.multilineInput]}
-            placeholder="Where should the sitter take the child? How will requester retrieve child after work?"
-            multiline
-            value={handoffDetails}
-            onChangeText={setHandoffDetails}
-          />
-          <TextInput
-            style={[styles.input, styles.multilineInput]}
-            placeholder="Other details: child name, authorization note, allergies, gate code, etc."
-            multiline
-            value={daycareDetails}
-            onChangeText={setDaycareDetails}
-          />
-          <Text style={styles.emergencyNote}>Reminder: TimeOut can coordinate the ping, but pickup authorization and phone/address exchange are still handled by the parents and confirmed sitter.</Text>
+          <View style={styles.row}>{(['Unknown', 'Needed', 'Not needed'] as CarSeatNeed[]).map((need) => <OptionButton key={need} title={need} selected={carSeatNeed === need} onPress={() => setCarSeatNeed(need)} />)}</View>
+          <TextInput style={[styles.input, styles.multilineInput]} placeholder="Where should the sitter take the child? How will requester retrieve child after work?" multiline value={handoffDetails} onChangeText={setHandoffDetails} />
+          <TextInput style={[styles.input, styles.multilineInput]} placeholder="Other details: child name, authorization note, allergies, gate code, etc." multiline value={daycareDetails} onChangeText={setDaycareDetails} />
+          <Text style={styles.emergencyNote}>TimeOut coordinates the ping. Pickup authorization, phone calls, and address exchange remain parent and confirmed-sitter responsibilities. Members should keep each other in native phone contacts.</Text>
         </View>
       ) : (
         <View style={styles.sectionCard}>
           <Text style={styles.label}>Location</Text>
           <View style={styles.row}>
-            <TouchableOpacity
-              style={[styles.optionButton, selectedLocation === 'Drop-off' ? styles.optionButtonSelected : null]}
-              onPress={() => setSelectedLocation('Drop-off')}>
-              <Text style={[styles.optionText, selectedLocation === 'Drop-off' ? styles.optionTextSelected : null]}>Drop-Off</Text>
-              <Text style={[styles.optionSubtext, selectedLocation === 'Drop-off' ? styles.optionSubtextSelected : null]}>At sitter&apos;s place</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.optionButton, selectedLocation === 'My Place' ? styles.optionButtonSelected : null]}
-              onPress={() => setSelectedLocation('My Place')}>
-              <Text style={[styles.optionText, selectedLocation === 'My Place' ? styles.optionTextSelected : null]}>My Place</Text>
-              <Text style={[styles.optionSubtext, selectedLocation === 'My Place' ? styles.optionSubtextSelected : null]}>Sit happens at home</Text>
-            </TouchableOpacity>
+            <OptionButton title="Drop-Off" subtitle="At sitter's place" selected={selectedLocation === 'Drop-off'} onPress={() => setSelectedLocation('Drop-off')} />
+            <OptionButton title="My Place" subtitle="Sit happens at home" selected={selectedLocation === 'My Place'} onPress={() => setSelectedLocation('My Place')} />
           </View>
-
           <Text style={styles.label}>Kids</Text>
           <View style={styles.row}>
-            <TouchableOpacity
-              style={[styles.optionButton, selectedKids === '1 Child' ? styles.optionButtonSelected : null]}
-              onPress={() => setSelectedKids('1 Child')}>
-              <Text style={[styles.optionText, selectedKids === '1 Child' ? styles.optionTextSelected : null]}>One Child</Text>
-              <Text style={[styles.optionSubtext, selectedKids === '1 Child' ? styles.optionSubtextSelected : null]}>Standard sit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.optionButton, selectedKids === '2+ Children' ? styles.optionButtonSelected : null]}
-              onPress={() => setSelectedKids('2+ Children')}>
-              <Text style={[styles.optionText, selectedKids === '2+ Children' ? styles.optionTextSelected : null]}>2+ Children</Text>
-              <Text style={[styles.optionSubtext, selectedKids === '2+ Children' ? styles.optionSubtextSelected : null]}>Bigger ask</Text>
-            </TouchableOpacity>
+            <OptionButton title="One Child" subtitle="Standard sit" selected={selectedKids === '1 Child'} onPress={() => setSelectedKids('1 Child')} />
+            <OptionButton title="2+ Children" subtitle="Bigger ask" selected={selectedKids === '2+ Children'} onPress={() => setSelectedKids('2+ Children')} />
           </View>
         </View>
       )}
 
       <View style={styles.sectionCard}>
         <Text style={styles.label}>Estimated Points</Text>
-        <View style={styles.pointRow}>
-          <Text style={styles.pointNumber}>{pointBreakdown.totalPoints}</Text>
-          <Text style={styles.pointText}>points</Text>
-        </View>
+        <View style={styles.pointRow}><Text style={styles.pointNumber}>{pointBreakdown.totalPoints}</Text><Text style={styles.pointText}>points</Text></View>
         <Text style={styles.pointDetail}>Base {pointBreakdown.basePoints} + kids {pointBreakdown.kidsBonus} + location {pointBreakdown.locationBonus} + emergency {pointBreakdown.emergencyBonus}</Text>
       </View>
 
       <View style={styles.sectionCard}>
         <Text style={styles.label}>Comments</Text>
-        <TextInput
-          style={[styles.input, styles.multilineInput]}
-          placeholder="Optional comments"
-          multiline
-          value={comments}
-          onChangeText={setComments}
-        />
-
+        <TextInput style={[styles.input, styles.multilineInput]} placeholder="Optional comments" multiline value={comments} onChangeText={setComments} />
         {!isEmergency ? (
           <>
             <Text style={styles.label}>Posting Mode</Text>
             <View style={styles.row}>
-              <TouchableOpacity style={[styles.optionButton, isPastSit ? null : styles.optionButtonSelected]} onPress={() => setIsPastSit(false)}>
-                <Text style={[styles.optionText, isPastSit ? null : styles.optionTextSelected]}>AutoPing</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.optionButton, isPastSit ? styles.optionButtonSelected : null]} onPress={() => setIsPastSit(true)}>
-                <Text style={[styles.optionText, isPastSit ? styles.optionTextSelected : null]}>Past Sit</Text>
-              </TouchableOpacity>
+              <OptionButton title="AutoPing" selected={!isPastSit} onPress={() => setIsPastSit(false)} />
+              <OptionButton title="Past Sit" selected={isPastSit} onPress={() => setIsPastSit(true)} />
             </View>
           </>
         ) : null}
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>{isEmergency ? 'Confirm & Broadcast Pickup' : isPastSit ? 'Log Past Sit' : 'Start AutoPing'}</Text>
-      </TouchableOpacity>
+      {showEmergencyConfirm ? (
+        <View style={styles.confirmBox}>
+          <Text style={styles.confirmTitle}>Ready to broadcast emergency pickup?</Text>
+          <Text style={styles.confirmText}>This will ping the circle now. First YES wins. You will still authorize pickup by the confirmed sitter name and exchange any phone/address details off app.</Text>
+          <Text style={styles.confirmSummary}>Pickup: {pickupLocation || 'missing'} • Timing: {emergencyStartLabel} • Car seat: {carSeatNeed}</Text>
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.reviewButton} onPress={() => setShowEmergencyConfirm(false)}><Text style={styles.reviewButtonText}>Review Again</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.broadcastButton} onPress={postRequest}><Text style={styles.broadcastButtonText}>Broadcast Now</Text></TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
 
-      <TouchableOpacity style={styles.ghostButton} onPress={() => router.back()}>
-        <Text style={styles.ghostButtonText}>Back to My TimeOut</Text>
+      {activeRequest && !isPastSit ? (
+        <TouchableOpacity style={styles.warningButton} onPress={cancelExistingAndPost}>
+          <Text style={styles.warningButtonText}>Cancel Existing AutoPing & Post This One</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
+        <Text style={styles.primaryButtonText}>{isEmergency ? (showEmergencyConfirm ? 'Broadcast Now' : 'Confirm Emergency Details') : isPastSit ? 'Log Past Sit' : 'Start AutoPing'}</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.ghostButton} onPress={() => router.back()}><Text style={styles.ghostButtonText}>Back to My TimeOut</Text></TouchableOpacity>
     </ScrollView>
   );
+}
+
+function GridButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return <TouchableOpacity style={[styles.gridButton, selected ? styles.gridButtonSelected : null]} onPress={onPress}><Text style={[styles.gridButtonText, selected ? styles.gridButtonTextSelected : null]}>{label}</Text></TouchableOpacity>;
+}
+
+function OptionButton({ title, subtitle, selected, onPress }: { title: string; subtitle?: string; selected: boolean; onPress: () => void }) {
+  return <TouchableOpacity style={[styles.optionButton, selected ? styles.optionButtonSelected : null]} onPress={onPress}><Text style={[styles.optionText, selected ? styles.optionTextSelected : null]}>{title}</Text>{subtitle ? <Text style={[styles.optionSubtext, selected ? styles.optionSubtextSelected : null]}>{subtitle}</Text> : null}</TouchableOpacity>;
 }
 
 const styles = StyleSheet.create({
@@ -492,7 +356,7 @@ const styles = StyleSheet.create({
   gridButtonSelected: { backgroundColor: '#be185d', borderColor: '#be185d', borderWidth: 2 },
   gridButtonText: { color: '#5b123d', fontSize: 16, fontWeight: '600' },
   gridButtonTextSelected: { color: '#ffffff' },
-  optionButton: { flex: 1, backgroundColor: '#fff8fc', borderWidth: 1, borderColor: '#ecc3d9', borderRadius: 18, minHeight: 92, paddingHorizontal: 12, paddingVertical: 14 },
+  optionButton: { flex: 1, backgroundColor: '#fff8fc', borderWidth: 1, borderColor: '#ecc3d9', borderRadius: 18, minHeight: 92, paddingHorizontal: 12, paddingVertical: 14, justifyContent: 'center' },
   optionButtonSelected: { backgroundColor: '#be185d', borderColor: '#be185d', borderWidth: 2 },
   optionText: { color: '#5b123d', fontSize: 16, fontWeight: '600', textAlign: 'center' },
   optionTextSelected: { color: '#ffffff' },
@@ -507,4 +371,16 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#ffffff', textAlign: 'center', fontSize: 18, fontWeight: '600' },
   ghostButton: { backgroundColor: '#ffffff', borderColor: '#ecc3d9', borderRadius: 20, borderWidth: 1, marginBottom: 24, padding: 16 },
   ghostButtonText: { color: '#8a1859', fontSize: 17, fontWeight: '600', textAlign: 'center' },
+  errorBox: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderRadius: 18, borderWidth: 1, marginBottom: 16, padding: 14 },
+  errorText: { color: '#9a1f1f', fontSize: 15, fontWeight: '700' },
+  confirmBox: { backgroundColor: '#fff4eb', borderColor: '#ffbf8b', borderRadius: 22, borderWidth: 1, marginBottom: 16, padding: 16 },
+  confirmTitle: { color: '#7a3000', fontSize: 19, fontWeight: '800', marginBottom: 6 },
+  confirmText: { color: '#7a4b2a', lineHeight: 20, marginBottom: 10 },
+  confirmSummary: { color: '#7a3000', fontWeight: '700', marginBottom: 12 },
+  reviewButton: { flex: 1, backgroundColor: '#ffffff', borderColor: '#ffbf8b', borderWidth: 1, borderRadius: 18, padding: 14 },
+  reviewButtonText: { color: '#7a3000', fontWeight: '800', textAlign: 'center' },
+  broadcastButton: { flex: 1, backgroundColor: '#be185d', borderRadius: 18, padding: 14 },
+  broadcastButtonText: { color: '#ffffff', fontWeight: '800', textAlign: 'center' },
+  warningButton: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderRadius: 18, borderWidth: 1, marginBottom: 10, padding: 14 },
+  warningButtonText: { color: '#9a1f1f', fontWeight: '800', textAlign: 'center' },
 });
