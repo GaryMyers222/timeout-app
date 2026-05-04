@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTimeoutStore } from '@/components/timeout-store';
 
 export default function PingStatusScreen() {
-  const { activeRequest, cancelActiveRequest, requests } = useTimeoutStore();
+  const { activeRequest, cancelActiveRequest, confirmFirstYes, resetMockRequests, requests } = useTimeoutStore();
   const displayRequest = activeRequest ?? requests[0] ?? null;
   const pingEvents = displayRequest?.pingEvents ?? [];
 
@@ -23,13 +23,31 @@ export default function PingStatusScreen() {
             <Text style={styles.helperText}>
               {displayRequest.dateLabel} • {displayRequest.startTime} • {displayRequest.duration} hours • {displayRequest.locationLabel}
             </Text>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusText}>{displayRequest.status.replace('_', ' ')}</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusText}>{displayRequest.status.replace('_', ' ')}</Text>
+              </View>
+              {displayRequest.confirmedSitterName ? (
+                <View style={styles.confirmedPill}>
+                  <Text style={styles.confirmedText}>YES: {displayRequest.confirmedSitterName}</Text>
+                </View>
+              ) : null}
             </View>
+            {displayRequest.status === 'confirmed' ? (
+              <View style={styles.confirmationBox}>
+                <Text style={styles.confirmationTitle}>Sit confirmed</Text>
+                <Text style={styles.confirmationText}>Confirmation goes to requester and sitter. Other candidates receive a polite filled message. Reminder schedule: 24 hours and 2 hours before start.</Text>
+              </View>
+            ) : null}
             {displayRequest.status === 'active' ? (
-              <Pressable style={styles.secondaryButton} onPress={cancelActiveRequest}>
-                <Text style={styles.secondaryText}>Cancel Active AutoPing</Text>
-              </Pressable>
+              <View style={styles.actionRow}>
+                <Pressable style={styles.primaryHalfButton} onPress={() => confirmFirstYes(displayRequest.id)}>
+                  <Text style={styles.primaryText}>Confirm First YES</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryHalfButton} onPress={cancelActiveRequest}>
+                  <Text style={styles.secondaryText}>Cancel AutoPing</Text>
+                </Pressable>
+              </View>
             ) : null}
           </>
         ) : (
@@ -56,7 +74,7 @@ export default function PingStatusScreen() {
               <View key={`${row.candidateName}-${row.sentAt}`} style={styles.tableRow}>
                 <Text style={[styles.cell, styles.nameCell]}>{row.candidateName}</Text>
                 <Text style={styles.cell}>{row.sentAt}</Text>
-                <Text style={[styles.cell, row.status === 'YES' && styles.yes]}>{row.status}</Text>
+                <Text style={[styles.cell, row.status === 'YES' && styles.yes, row.status === 'Filled' && styles.filled]}>{row.status}</Text>
               </View>
             ))}
           </>
@@ -81,6 +99,11 @@ export default function PingStatusScreen() {
             <Text style={styles.requestDetail}>Your test requests will appear here after you tap Start AutoPing.</Text>
           </View>
         )}
+        {requests.length > 0 ? (
+          <Pressable style={styles.resetButton} onPress={resetMockRequests}>
+            <Text style={styles.resetText}>Clear Mock Requests</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -103,22 +126,33 @@ const styles = StyleSheet.create({
   tagline: { color: '#ffeaf7', fontSize: 16, marginTop: 8 },
   section: { backgroundColor: 'white', borderRadius: 22, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#f0d8e7' },
   primaryButton: { backgroundColor: '#8b2bbf', padding: 16, borderRadius: 18, alignItems: 'center', marginBottom: 16 },
-  primaryText: { color: 'white', fontWeight: '900', fontSize: 17 },
-  secondaryButton: { backgroundColor: '#fff0f7', borderColor: '#e3bfd6', borderWidth: 1, padding: 14, borderRadius: 16, alignItems: 'center', marginTop: 12 },
-  secondaryText: { color: '#8b2bbf', fontWeight: '900' },
+  primaryText: { color: 'white', fontWeight: '900', fontSize: 16, textAlign: 'center' },
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  primaryHalfButton: { flex: 1, backgroundColor: '#8b2bbf', padding: 14, borderRadius: 16, alignItems: 'center' },
+  secondaryHalfButton: { flex: 1, backgroundColor: '#fff0f7', borderColor: '#e3bfd6', borderWidth: 1, padding: 14, borderRadius: 16, alignItems: 'center' },
+  secondaryText: { color: '#8b2bbf', fontWeight: '900', textAlign: 'center' },
   sectionTitle: { fontSize: 21, fontWeight: '900', color: '#372333', marginBottom: 8 },
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   statusPill: { alignSelf: 'flex-start', backgroundColor: '#f4e6ff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   statusText: { color: '#8b2bbf', fontWeight: '900', textTransform: 'uppercase' },
+  confirmedPill: { alignSelf: 'flex-start', backgroundColor: '#e8fff1', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  confirmedText: { color: '#20894d', fontWeight: '900' },
+  confirmationBox: { backgroundColor: '#f2fff7', borderColor: '#b8e8c8', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
+  confirmationTitle: { color: '#20894d', fontWeight: '900', fontSize: 16, marginBottom: 4 },
+  confirmationText: { color: '#35634a', lineHeight: 20 },
   tableHeader: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#e3bfd6', paddingBottom: 8 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0d8e7', paddingVertical: 12 },
   headerCell: { flex: 1, color: '#76566a', fontWeight: '900' },
   cell: { flex: 1, color: '#372333', fontWeight: '700' },
   nameCell: { flex: 1.4 },
   yes: { color: '#20894d', fontWeight: '900' },
+  filled: { color: '#9a6b7c', fontWeight: '900' },
   requestCard: { backgroundColor: '#fffafd', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#ead2e2', marginTop: 10 },
   requestTitle: { color: '#372333', fontWeight: '900', fontSize: 16 },
   requestDetail: { color: '#76566a', marginTop: 4 },
+  resetButton: { marginTop: 14, padding: 12, alignItems: 'center' },
+  resetText: { color: '#8b2bbf', fontWeight: '900' },
   ruleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   ruleDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f4e6ff', color: '#8b2bbf', fontWeight: '900', textAlign: 'center', lineHeight: 28, marginRight: 10 },
   ruleText: { flex: 1, color: '#372333', fontWeight: '700' },
