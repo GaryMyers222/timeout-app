@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
-import { AutoPingMode, MOCK_CANDIDATES, SitPresetKey } from '@/constants/timeout-rules';
+import { AutoPingMode, MOCK_CANDIDATES, POINTS_PER_HOUR, SitPresetKey } from '@/constants/timeout-rules';
 
 export type Candidate = {
   id: string;
@@ -28,6 +28,12 @@ export type SitStatus =
   | 'past_logged'
   | 'cancelled';
 
+export type EmergencyPointBreakdown = {
+  yesToPickupBonus: number;
+  pickupToEndPoints: number;
+  totalPoints: number;
+};
+
 export type SitRequest = {
   id: string;
   presetKey: SitPresetKey;
@@ -45,13 +51,18 @@ export type SitRequest = {
   confirmedSitterName?: string;
   confirmedSitterPhone?: string;
   confirmedSitterAddress?: string;
+  firstYesAt?: string;
+  pickupCompletedAt?: string;
+  sitEndedAt?: string;
+  pointsSettledAt?: string;
+  emergencyPointBreakdown?: EmergencyPointBreakdown;
   cancellationScope?: CancellationScope;
   cancellationNote?: string;
   candidates: Candidate[];
   pingEvents: PingEvent[];
 };
 
-type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress' | 'cancellationScope' | 'cancellationNote'>;
+type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress' | 'firstYesAt' | 'pickupCompletedAt' | 'sitEndedAt' | 'pointsSettledAt' | 'emergencyPointBreakdown' | 'cancellationScope' | 'cancellationNote'>;
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
@@ -67,6 +78,7 @@ type TimeoutStoreValue = {
 };
 
 const TimeoutStoreContext = createContext<TimeoutStoreValue | null>(null);
+const EMERGENCY_YES_TO_PICKUP_BONUS = 6;
 
 function isSameCalendarDay(left: Date, right: Date) {
   return (
@@ -104,6 +116,27 @@ function buildMockPingEvents(autoPingMode: AutoPingMode, candidates: Candidate[]
 
 function findFirstYes(events: PingEvent[]) {
   return events.find((event) => event.status === 'YES');
+}
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function formatTimestamp(date: Date) {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function calculateEmergencyPoints(pickupCompletedAt?: string, sitEndedAt?: string): EmergencyPointBreakdown {
+  // Mock V1 math: emergency bonus covers first YES -> daycare pickup.
+  // Normal sit points start at daycare pickup and run until requester arrival / end sit.
+  // The mock uses 1 hour for pickup-to-end unless real timestamps are wired later.
+  const pickupToEndHours = pickupCompletedAt && sitEndedAt ? 1 : 1;
+  const pickupToEndPoints = pickupToEndHours * POINTS_PER_HOUR;
+  return {
+    yesToPickupBonus: EMERGENCY_YES_TO_PICKUP_BONUS,
+    pickupToEndPoints,
+    totalPoints: EMERGENCY_YES_TO_PICKUP_BONUS + pickupToEndPoints,
+  };
 }
 
 function updateRequestStatus(requests: SitRequest[], requestId: string, status: SitStatus) {
@@ -175,11 +208,13 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
         setRequests((current) =>
           current.map((request) => {
             if (request.id !== requestId || request.status !== 'active') return request;
+            const now = new Date();
             const firstYes = findFirstYes(request.pingEvents);
             const confirmedSitterName = firstYes?.candidateName ?? request.candidates[0]?.name ?? 'Confirmed sitter';
             return {
               ...request,
               status: 'confirmed',
+              firstYesAt: formatTimestamp(now),
               confirmedSitterName,
               confirmedSitterPhone: firstYes?.responderPhone ?? '(555) 013-0000',
               confirmedSitterAddress: firstYes?.responderAddress ?? 'Shared after confirmation',
@@ -194,9 +229,39 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
           })
         );
       },
-      markPickupComplete: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'pickup_complete')),
-      endSit: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'completed')),
-      settlePoints: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'points_settled')),
+      markPickupComplete: (requestId) => {
+        setRequests((current) =>
+          current.map((request) => {
+            if (request.id !== requestId) return request;
+            const now = addMinutes(new Date(), 35);
+            return { ...request, status: 'pickup_complete', pickupCompletedAt: formatTimestamp(now) };
+          })
+        );
+      },
+      endSit: (requestId) => {
+        setRequests((current) =>
+          current.map((request) => {
+            if (request.id !== requestId) return request;
+            const now = addMinutes(new Date(), 95);
+            return { ...request, status: 'completed', sitEndedAt: formatTimestamp(now) };
+          })
+        );
+      },
+      settlePoints: (requestId) => {
+        setRequests((current) =>
+          current.map((request) => {
+            if (request.id !== requestId) return request;
+            return {
+              ...request,
+              status: 'points_settled',
+              pointsSettledAt: formatTimestamp(new Date()),
+              emergencyPointBreakdown: request.presetKey === 'emergency-daycare-pickup'
+                ? calculateEmergencyPoints(request.pickupCompletedAt, request.sitEndedAt)
+                : undefined,
+            };
+          })
+        );
+      },
       resetMockRequests: () => setRequests([]),
     }),
     [activeRequest, requests]
