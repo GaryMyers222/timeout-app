@@ -1,20 +1,18 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
-export type AutoPingMode = 'sequential' | 'broadcast' | 'disabled';
-
-export type SitPresetKey =
-  | 'custom'
-  | 'emergency-daycare-pickup'
-  | 'friday-date-night'
-  | 'saturday-date-night'
-  | 'playdate'
-  | 'gathering-rsvp';
+import { AutoPingMode, MOCK_CANDIDATES, SitPresetKey } from '@/constants/timeout-rules';
 
 export type Candidate = {
   id: string;
   name: string;
   pointsBalance: number;
   channel: 'app' | 'sms';
+};
+
+export type PingEvent = {
+  candidateName: string;
+  sentAt: string;
+  status: 'No response' | 'YES' | 'Waiting';
 };
 
 export type SitRequest = {
@@ -30,11 +28,12 @@ export type SitRequest = {
   createdAt: string;
   isPastSit: boolean;
   autoPingMode: AutoPingMode;
-  status: 'draft' | 'active' | 'confirmed' | 'timed_out' | 'past_logged' | 'cancelled';
+  status: 'active' | 'confirmed' | 'timed_out' | 'past_logged' | 'cancelled';
   candidates: Candidate[];
+  pingEvents: PingEvent[];
 };
 
-type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates'>;
+type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents'>;
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
@@ -42,13 +41,6 @@ type TimeoutStoreValue = {
   createRequest: (input: CreateSitRequestInput) => SitRequest;
   cancelActiveRequest: () => void;
 };
-
-const defaultCandidates: Candidate[] = [
-  { id: 'mia', name: 'Mia', pointsBalance: -9, channel: 'app' },
-  { id: 'jules', name: 'Jules', pointsBalance: -6, channel: 'app' },
-  { id: 'grandma-rose', name: 'Grandma Rose', pointsBalance: 0, channel: 'sms' },
-  { id: 'nina', name: 'Nina', pointsBalance: 4, channel: 'app' },
-];
 
 const TimeoutStoreContext = createContext<TimeoutStoreValue | null>(null);
 
@@ -62,6 +54,24 @@ function isSameCalendarDay(left: Date, right: Date) {
 
 function sortCandidatesByDebt(candidates: Candidate[]) {
   return [...candidates].sort((a, b) => a.pointsBalance - b.pointsBalance);
+}
+
+function buildMockPingEvents(autoPingMode: AutoPingMode, candidates: Candidate[]): PingEvent[] {
+  if (autoPingMode === 'disabled') return [];
+
+  if (autoPingMode === 'broadcast') {
+    return candidates.slice(0, 4).map((candidate, index) => ({
+      candidateName: candidate.name,
+      sentAt: 'now',
+      status: index === 1 ? 'YES' : 'No response',
+    }));
+  }
+
+  return candidates.slice(0, 4).map((candidate, index) => ({
+    candidateName: candidate.name,
+    sentAt: `5:${String(9 + index * 10).padStart(2, '0')}`,
+    status: index === 3 ? 'YES' : 'No response',
+  }));
 }
 
 export function TimeoutStoreProvider({ children }: { children: React.ReactNode }) {
@@ -78,14 +88,14 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
       activeRequest,
       createRequest: (input) => {
         const now = new Date();
-        const nextStatus = input.isPastSit ? 'past_logged' : 'active';
+        const candidates = input.autoPingMode === 'disabled' ? [] : sortCandidatesByDebt(MOCK_CANDIDATES);
         const nextRequest: SitRequest = {
           ...input,
           id: `${now.getTime()}`,
           createdAt: now.toISOString(),
-          status: nextStatus,
-          candidates:
-            input.autoPingMode === 'disabled' ? [] : sortCandidatesByDebt(defaultCandidates),
+          status: input.isPastSit ? 'past_logged' : 'active',
+          candidates,
+          pingEvents: buildMockPingEvents(input.autoPingMode, candidates),
         };
 
         setRequests((current) => {
