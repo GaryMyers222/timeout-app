@@ -50,7 +50,7 @@ Build in V1:
 - sit completion and auto fallback
 - points ledger and transfer
 - past sit entry
-- same-day active ping conflict handling
+- same-day duplicate/overlap warning
 - basic ghost/system adjustment capability
 
 Defer from V1:
@@ -66,6 +66,8 @@ Defer from V1:
 ### Sit Requests
 
 - Do not save draft sit requests.
+- Each sit or pickup request must have a unique identifier.
+- A requester may create multiple same-day requests when real life requires it, for example multiple doctor appointments or separate errands.
 - App presets are fixed and app-defined only.
 - Do not support user-created presets.
 - Presets are primarily a marketing surface.
@@ -87,6 +89,8 @@ Defer from V1:
 - The generated name should feel human and editable later.
 - Invitees should inherit the inviter group identity.
 - If a user belongs to more than one group, the product must keep group identity clear.
+- Multi-group membership is rare but must be supported conceptually; each request should belong to exactly one group/circle.
+- A user with more than one TimeOut group may need clear group labeling or possibly separate app entry points/icons later, but V1 should first preserve request/circle identity cleanly.
 
 ### Invite vs Share
 
@@ -105,8 +109,10 @@ Defer from V1:
 - Remove generic batch mode language from product/spec text.
 - No 2-hour AutoPing cutoff in V1.
 - AutoPing continues until first YES, requester cancels, or list is exhausted.
-- Same-day rule: only one active AutoPing per day.
-- On same-day conflict, prompt the requester to wait or cancel and continue.
+- V1 should not enforce a blanket one-active-AutoPing-per-day rule.
+- Same-day warnings should focus on possible duplicate or overlapping requests, not block legitimate separate requests.
+- If a requester already has an active request that appears to overlap or duplicate the new request, prompt the requester to review, wait, cancel the earlier request, or continue intentionally.
+- Multiple same-day requests are allowed when they represent separate real-world needs.
 - Once the requester confirms/sends AutoPing, the requester waits for results; the app should not ask the requester to customize the ping while it is running.
 - First YES triggers confirmation to requester and sitter, and the system sends polite filled messages to remaining candidates.
 - Emergency Daycare Pickup is the main edge case where the first YES should be able to provide phone/handoff details as part of the response.
@@ -238,6 +244,7 @@ Treat these statements in Parts 1, 2, and 3 as outdated unless reapproved:
 - inactive users are removed after 180 days
 - generic batch mode language
 - any requirement contradicting fixed-preset or one-active-ping rules
+- any blanket one-active-AutoPing-per-day rule
 
 ## Best Near-Term Build Order
 
