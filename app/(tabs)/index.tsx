@@ -14,10 +14,12 @@ const DURATION_GRID = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', 
 
 type LocationType = 'Drop-off' | 'My Place';
 type KidCount = '1 Child' | '2+ Children';
+type RequestMode = 'presets' | 'custom';
 
 type Preset = {
   title: string;
   subtitle: string;
+  promise: string;
   icon: string;
   startHour: string;
   startMinute: string;
@@ -31,8 +33,9 @@ type Preset = {
 
 const PRESETS: Preset[] = [
   {
-    title: 'Friday Date + Dinner',
+    title: 'Friday Date Night',
     subtitle: 'My Place sit, 8-11:30 PM',
+    promise: 'Imagine date night again.',
     icon: '♡',
     startHour: '8',
     startMinute: ':00',
@@ -43,20 +46,23 @@ const PRESETS: Preset[] = [
     kidCount: '1 Child',
   },
   {
-    title: 'Saturday Date + Dinner',
-    subtitle: 'My Place sit, 8-11:30 PM',
-    icon: '♡',
-    startHour: '8',
+    title: 'Emergency Daycare Pickup',
+    subtitle: 'Broadcast urgent pickup help',
+    promise: 'When the day goes sideways.',
+    icon: '!',
+    startHour: '5',
     startMinute: ':00',
     ampm: 'PM',
-    durationHour: '3',
-    durationMinute: ':30',
-    location: 'My Place',
+    durationHour: '1',
+    durationMinute: ':00',
+    location: 'Drop-off',
     kidCount: '1 Child',
+    emergency: true,
   },
   {
     title: 'Saturday Brunch',
     subtitle: 'Drop-off sit, 9 AM-noon',
+    promise: 'A little breathing room.',
     icon: '✿',
     startHour: '9',
     startMinute: ':00',
@@ -69,6 +75,7 @@ const PRESETS: Preset[] = [
   {
     title: 'Sunday Home Project',
     subtitle: 'Drop-off sit, 1-5 PM',
+    promise: 'Get one thing finished.',
     icon: '⚒',
     startHour: '1',
     startMinute: ':00',
@@ -78,31 +85,18 @@ const PRESETS: Preset[] = [
     location: 'Drop-off',
     kidCount: '1 Child',
   },
-  {
-    title: 'Emergency Daycare Pickup',
-    subtitle: 'Broadcast urgent pickup help',
-    icon: '!',
-    startHour: '5',
-    startMinute: ':00',
-    ampm: 'PM',
-    durationHour: '1',
-    durationMinute: ':00',
-    location: 'Drop-off',
-    kidCount: '1 Child',
-    emergency: true,
-  },
 ];
 
 const CANDIDATES = [
-  { name: 'User A', balance: -28, type: 'member' },
-  { name: 'User B', balance: -21, type: 'member' },
-  { name: 'User C', balance: -11, type: 'member' },
-  { name: 'User D', balance: 3, type: 'member' },
-  { name: 'User E', balance: 9, type: 'member' },
-  { name: 'User F', balance: 23, type: 'member' },
-  { name: 'User G', balance: 24, type: 'member' },
-  { name: 'Teen helper', balance: null, type: 'teen' },
-  { name: 'Grandma pickup', balance: null, type: 'family' },
+  { name: 'User A', balance: -28 },
+  { name: 'User B', balance: -21 },
+  { name: 'User C', balance: -11 },
+  { name: 'User D', balance: 3 },
+  { name: 'User E', balance: 9 },
+  { name: 'User F', balance: 23 },
+  { name: 'User G', balance: 24 },
+  { name: 'Teen helper', balance: null },
+  { name: 'Grandma pickup', balance: null },
 ];
 
 function minutesFromLabel(label: string) {
@@ -119,19 +113,20 @@ function formatBalance(balance: number | null) {
 }
 
 export default function TimeOutHomeScreen() {
-  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
-  const [startHour, setStartHour] = useState('8');
-  const [startMinute, setStartMinute] = useState(':00');
-  const [ampm, setAmpm] = useState<'AM' | 'PM'>('PM');
-  const [durationHour, setDurationHour] = useState('3');
-  const [durationMinute, setDurationMinute] = useState(':00');
-  const [kidCount, setKidCount] = useState<KidCount>('1 Child');
-  const [location, setLocation] = useState<LocationType>('Drop-off');
+  const [mode, setMode] = useState<RequestMode>('presets');
+  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(PRESETS[0]);
+  const [startHour, setStartHour] = useState(PRESETS[0].startHour);
+  const [startMinute, setStartMinute] = useState(PRESETS[0].startMinute);
+  const [ampm, setAmpm] = useState<'AM' | 'PM'>(PRESETS[0].ampm);
+  const [durationHour, setDurationHour] = useState(PRESETS[0].durationHour);
+  const [durationMinute, setDurationMinute] = useState(PRESETS[0].durationMinute);
+  const [kidCount, setKidCount] = useState<KidCount>(PRESETS[0].kidCount);
+  const [location, setLocation] = useState<LocationType>(PRESETS[0].location);
   const [comments, setComments] = useState('');
   const [daycareDetails, setDaycareDetails] = useState('');
 
   const isEmergency = selectedPreset?.emergency ?? false;
-  const isPresetFlow = selectedPreset !== null;
+  const isPresetFlow = mode === 'presets' && selectedPreset !== null;
 
   const points = useMemo(() => {
     const base = durationHours(durationHour, durationMinute) * 4;
@@ -141,9 +136,11 @@ export default function TimeOutHomeScreen() {
     return Math.round(base + kidsBonus + locationBonus + emergencyBonus);
   }, [durationHour, durationMinute, kidCount, location, isEmergency]);
 
-  const requestMessage = `${selectedPreset?.title ?? 'Custom TimeOut'} • ${startHour}${startMinute} ${ampm} • ${durationHour}${durationMinute} hours • ${kidCount} • ${location} • ${points} points`;
+  const requestTitle = isPresetFlow ? selectedPreset.title : 'Custom Sit Request';
+  const requestMessage = `${requestTitle} • ${startHour}${startMinute} ${ampm} • ${durationHour}${durationMinute} hours • ${kidCount} • ${location} • ${points} points`;
 
   function applyPreset(preset: Preset) {
+    setMode('presets');
     setSelectedPreset(preset);
     setStartHour(preset.startHour);
     setStartMinute(preset.startMinute);
@@ -154,7 +151,8 @@ export default function TimeOutHomeScreen() {
     setKidCount(preset.kidCount);
   }
 
-  function clearPreset() {
+  function chooseCustom() {
+    setMode('custom');
     setSelectedPreset(null);
   }
 
@@ -163,7 +161,9 @@ export default function TimeOutHomeScreen() {
       isEmergency ? 'Emergency broadcast ready' : 'AutoPing ready',
       isEmergency
         ? 'Emergency Daycare Pickup will broadcast for the first YES. Remember to authorize pickup by the confirmed sitter name.'
-        : 'Normal AutoPing will contact members sequentially by lowest point balance first.'
+        : isPresetFlow
+          ? 'Preset AutoPing keeps the ping list simple and sends the request quickly.'
+          : 'Custom AutoPing will contact members sequentially by lowest point balance first.'
     );
   }
 
@@ -183,37 +183,52 @@ export default function TimeOutHomeScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <Text style={styles.kicker}>TimeOut</Text>
-        <Text style={styles.title}>Schedule my TimeOut</Text>
-        <Text style={styles.tagline}>No more hunting and begging for a sitter.</Text>
-        <View style={styles.pointsPill}>
-          <Text style={styles.pointsText}>You have 10 points</Text>
-          <Text style={styles.pointsSubtext}>The points will work out</Text>
+        <Text style={styles.title}>Friends make the best sitters.</Text>
+        <Text style={styles.tagline}>Private circles. No strangers. Quick help when parents need breathing room.</Text>
+        <View style={styles.trustRow}>
+          <Text style={styles.trustPill}>Trusted friends</Text>
+          <Text style={styles.trustPill}>AutoPing</Text>
+          <Text style={styles.trustPill}>Points balance</Text>
         </View>
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>QuickPing presets</Text>
-          {isPresetFlow ? <Pressable onPress={clearPreset}><Text style={styles.linkText}>Custom</Text></Pressable> : null}
-        </View>
-        <Text style={styles.helperText}>Presets are fixed and low-friction. Use Custom when you want control over the candidate list.</Text>
-        {PRESETS.map((preset) => (
-          <Pressable
-            key={preset.title}
-            onPress={() => applyPreset(preset)}
-            style={[styles.presetCard, selectedPreset?.title === preset.title && styles.selectedCard]}>
-            <Text style={styles.presetIcon}>{preset.icon}</Text>
-            <View style={styles.presetCopy}>
-              <Text style={styles.presetTitle}>{preset.title}</Text>
-              <Text style={styles.presetSubtitle}>{preset.subtitle}</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        ))}
+      <View style={styles.modeSwitch}>
+        <Pressable onPress={() => setMode('presets')} style={[styles.modeButton, mode === 'presets' && styles.modeSelected]}>
+          <Text style={[styles.modeText, mode === 'presets' && styles.modeSelectedText]}>QuickPing Presets</Text>
+        </Pressable>
+        <Pressable onPress={chooseCustom} style={[styles.modeButton, mode === 'custom' && styles.modeSelected]}>
+          <Text style={[styles.modeText, mode === 'custom' && styles.modeSelectedText]}>Custom Sit Request</Text>
+        </Pressable>
       </View>
 
+      {mode === 'presets' ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Pick the kind of help you need</Text>
+          <Text style={styles.helperText}>One tap starts a familiar request. You can scroll for more options.</Text>
+          {PRESETS.map((preset) => (
+            <Pressable
+              key={preset.title}
+              onPress={() => applyPreset(preset)}
+              style={[styles.presetCard, selectedPreset?.title === preset.title && styles.selectedCard, preset.emergency && styles.emergencyPreset]}>
+              <Text style={[styles.presetIcon, preset.emergency && styles.emergencyIcon]}>{preset.icon}</Text>
+              <View style={styles.presetCopy}>
+                <Text style={styles.promiseText}>{preset.promise}</Text>
+                <Text style={styles.presetTitle}>{preset.title}</Text>
+                <Text style={styles.presetSubtitle}>{preset.subtitle}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Custom sit request</Text>
+          <Text style={styles.helperText}>Use custom when you want control over details or candidate selection.</Text>
+        </View>
+      )}
+
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Custom sit request</Text>
+        <Text style={styles.sectionTitle}>{mode === 'presets' ? 'Review preset details' : 'Build request details'}</Text>
         <Text style={styles.label}>Start time</Text>
         <View style={styles.matrix}>
           {START_GRID.map((item) => {
@@ -324,27 +339,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#8b2bbf',
     borderRadius: 28,
     padding: 22,
-    marginBottom: 16,
+    marginBottom: 14,
     shadowColor: '#000',
     shadowOpacity: 0.18,
     shadowRadius: 12,
     elevation: 4,
   },
   kicker: { color: '#ffd5ef', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
-  title: { color: 'white', fontSize: 34, fontWeight: '900', marginTop: 6 },
-  tagline: { color: '#ffeaf7', fontSize: 16, marginTop: 8 },
-  pointsPill: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 18, padding: 12, marginTop: 18 },
-  pointsText: { color: 'white', fontSize: 18, fontWeight: '800' },
-  pointsSubtext: { color: '#ffeaf7', marginTop: 2 },
+  title: { color: 'white', fontSize: 31, fontWeight: '900', marginTop: 6, lineHeight: 36 },
+  tagline: { color: '#ffeaf7', fontSize: 16, marginTop: 8, lineHeight: 22 },
+  trustRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 18 },
+  trustPill: { color: 'white', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, fontWeight: '800' },
+  modeSwitch: { flexDirection: 'row', backgroundColor: '#f2dced', borderRadius: 18, padding: 4, marginBottom: 14 },
+  modeButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 14 },
+  modeSelected: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
+  modeText: { color: '#76566a', fontWeight: '900', fontSize: 13 },
+  modeSelectedText: { color: '#8b2bbf' },
   section: { backgroundColor: 'white', borderRadius: 22, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#f0d8e7' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: 21, fontWeight: '900', color: '#372333', marginBottom: 8 },
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
-  linkText: { color: '#8b2bbf', fontSize: 16, fontWeight: '800' },
   presetCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ead2e2', borderRadius: 18, padding: 14, marginTop: 10, backgroundColor: '#fffafd' },
   selectedCard: { borderColor: '#8b2bbf', backgroundColor: '#f4e6ff' },
-  presetIcon: { fontSize: 30, width: 42, color: '#8b2bbf', textAlign: 'center' },
+  emergencyPreset: { borderColor: '#ffbf8b', backgroundColor: '#fff4eb' },
+  presetIcon: { fontSize: 30, width: 42, color: '#8b2bbf', textAlign: 'center', fontWeight: '900' },
+  emergencyIcon: { color: '#c65300' },
   presetCopy: { flex: 1, paddingLeft: 10 },
+  promiseText: { color: '#8b2bbf', fontWeight: '900', marginBottom: 2 },
   presetTitle: { color: '#372333', fontWeight: '900', fontSize: 16 },
   presetSubtitle: { color: '#76566a', marginTop: 3 },
   chevron: { fontSize: 30, color: '#8b2bbf' },
