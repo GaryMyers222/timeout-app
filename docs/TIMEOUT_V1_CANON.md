@@ -20,7 +20,7 @@ The August stories carry the strongest founder/product intent. The locked addend
 
 TimeOut is not a marketplace. It is a trust-based coordination tool for local sitter-friends.
 
-Core loop:
+The core loop is:
 
 1. invite trusted local sitter-friends
 2. create a sit request quickly
@@ -107,12 +107,26 @@ Defer from V1:
 - AutoPing continues until first YES, requester cancels, or list is exhausted.
 - Same-day rule: only one active AutoPing per day.
 - On same-day conflict, prompt the requester to wait or cancel and continue.
+- Once the requester confirms/sends AutoPing, the requester waits for results; the app should not ask the requester to customize the ping while it is running.
+- First YES triggers confirmation to requester and sitter, and the system sends polite filled messages to remaining candidates.
+- Emergency Daycare Pickup is the main edge case where the first YES should be able to provide phone/handoff details as part of the response.
 
 ### Candidate Ordering
 
 - Sort candidates with the lowest point balance first.
 - This is a circulation mechanic, not a fairness claim.
 - Product language should describe effectiveness and circulation, not fairness.
+
+### Cancellation / Edits
+
+- Users must have an option to cancel from each confirmation, reminder, and notification surface where cancellation is relevant.
+- Editing an active sit request or active ping is not a V1 priority.
+- The app should generally prefer cancel-and-reenter or cancel-and-reping over editing an active request.
+- This is acceptable because the core product relies on quick repings.
+- Cancellation scope must be explicit because some broadcast activities involve multiple participants.
+- For a normal sit, cancellation usually cancels the requester/sitter sit.
+- For playdate or gathering RSVP, one user's cancellation should cancel only that user's participation unless the user is the host/facilitator and explicitly chooses to cancel the entire activity.
+- Avoid a design where a single attendee confirming or cancelling a playdate accidentally cancels the entire group activity for everyone.
 
 ### Past Sits
 
@@ -146,6 +160,8 @@ Defer from V1:
 - Reminder notifications must include a cancel option.
 - Both requester and sitter may cancel before points are posted.
 - Reminder and confirmation notifications should support direct action without unnecessary navigation.
+- Cancellation from a reminder should clearly state what will be cancelled and who will be notified.
+- For group/broadcast activities such as playdate or gathering RSVP, reminder cancellation must distinguish between cancelling one's own participation and cancelling the entire activity.
 
 ## Invite / Startup Path
 
