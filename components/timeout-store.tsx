@@ -36,6 +36,8 @@ export type EmergencyPointBreakdown = {
 
 export type SitRequest = {
   id: string;
+  requestCode: string;
+  groupId: string;
   presetKey: SitPresetKey;
   title: string;
   dateLabel: string;
@@ -62,10 +64,11 @@ export type SitRequest = {
   pingEvents: PingEvent[];
 };
 
-type CreateSitRequestInput = Omit<SitRequest, 'id' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress' | 'firstYesAt' | 'pickupCompletedAt' | 'sitEndedAt' | 'pointsSettledAt' | 'emergencyPointBreakdown' | 'cancellationScope' | 'cancellationNote'>;
+type CreateSitRequestInput = Omit<SitRequest, 'id' | 'requestCode' | 'groupId' | 'createdAt' | 'status' | 'candidates' | 'pingEvents' | 'confirmedSitterName' | 'confirmedSitterPhone' | 'confirmedSitterAddress' | 'firstYesAt' | 'pickupCompletedAt' | 'sitEndedAt' | 'pointsSettledAt' | 'emergencyPointBreakdown' | 'cancellationScope' | 'cancellationNote'>;
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
+  activeRequests: SitRequest[];
   activeRequest: SitRequest | null;
   createRequest: (input: CreateSitRequestInput) => SitRequest;
   cancelActiveRequest: () => void;
@@ -79,14 +82,6 @@ type TimeoutStoreValue = {
 
 const TimeoutStoreContext = createContext<TimeoutStoreValue | null>(null);
 const EMERGENCY_YES_TO_PICKUP_BONUS = 6;
-
-function isSameCalendarDay(left: Date, right: Date) {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
 
 function sortCandidatesByDebt(candidates: Candidate[]) {
   return [...candidates].sort((a, b) => a.pointsBalance - b.pointsBalance);
@@ -126,10 +121,11 @@ function formatTimestamp(date: Date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function buildRequestCode(date: Date) {
+  return `TO-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${String(date.getTime()).slice(-5)}`;
+}
+
 function calculateEmergencyPoints(pickupCompletedAt?: string, sitEndedAt?: string): EmergencyPointBreakdown {
-  // Mock V1 math: emergency bonus covers first YES -> daycare pickup.
-  // Normal sit points start at daycare pickup and run until requester arrival / end sit.
-  // The mock uses 1 hour for pickup-to-end unless real timestamps are wired later.
   const pickupToEndHours = pickupCompletedAt && sitEndedAt ? 1 : 1;
   const pickupToEndPoints = pickupToEndHours * POINTS_PER_HOUR;
   return {
@@ -146,14 +142,17 @@ function updateRequestStatus(requests: SitRequest[], requestId: string, status: 
 export function TimeoutStoreProvider({ children }: { children: React.ReactNode }) {
   const [requests, setRequests] = useState<SitRequest[]>([]);
 
-  const activeRequest = useMemo(
-    () => requests.find((request) => request.status === 'active') ?? null,
+  const activeRequests = useMemo(
+    () => requests.filter((request) => request.status === 'active'),
     [requests]
   );
+
+  const activeRequest = activeRequests[0] ?? null;
 
   const value = useMemo<TimeoutStoreValue>(
     () => ({
       requests,
+      activeRequests,
       activeRequest,
       createRequest: (input) => {
         const now = new Date();
@@ -161,28 +160,15 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
         const nextRequest: SitRequest = {
           ...input,
           id: `${now.getTime()}`,
+          requestCode: buildRequestCode(now),
+          groupId: 'default-circle',
           createdAt: now.toISOString(),
           status: input.isPastSit ? 'past_logged' : 'active',
           candidates,
           pingEvents: buildMockPingEvents(input.autoPingMode, candidates),
         };
 
-        setRequests((current) => {
-          const shouldCancelExisting =
-            !input.isPastSit &&
-            current.some(
-              (request) =>
-                request.status === 'active' && isSameCalendarDay(new Date(request.createdAt), now)
-            );
-
-          const nextRequests = shouldCancelExisting
-            ? current.map((request) =>
-                request.status === 'active' ? { ...request, status: 'cancelled' as const } : request
-              )
-            : current;
-
-          return [nextRequest, ...nextRequests];
-        });
+        setRequests((current) => [nextRequest, ...current]);
 
         return nextRequest;
       },
@@ -264,7 +250,7 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
       },
       resetMockRequests: () => setRequests([]),
     }),
-    [activeRequest, requests]
+    [activeRequest, activeRequests, requests]
   );
 
   return <TimeoutStoreContext.Provider value={value}>{children}</TimeoutStoreContext.Provider>;
