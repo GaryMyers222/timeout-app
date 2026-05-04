@@ -52,7 +52,7 @@ export default function PingStatusScreen() {
       pickupLocation: displayRequest.comments.match(/Pickup location: (.*)/)?.[1],
       confirmedPhone: displayRequest.confirmedSitterPhone,
       handoffNote: displayRequest.confirmedSitterAddress,
-      points: 10,
+      points: displayRequest.emergencyPointBreakdown?.totalPoints ?? 10,
     };
 
     const requestMessage = isEmergency ? buildEmergencyPickupMessage(base) : buildSitRequestMessage(base);
@@ -165,10 +165,26 @@ export default function PingStatusScreen() {
               <View style={styles.confirmationBox}>
                 <Text style={styles.confirmationTitle}>Emergency pickup sequence</Text>
                 <Text style={styles.confirmationText}>Confirmation goes to both parties with names, phone numbers, pickup data, and handoff details.</Text>
+                {displayRequest.firstYesAt ? <Text style={styles.confirmationText}>First YES: {displayRequest.firstYesAt}</Text> : null}
+                {displayRequest.pickupCompletedAt ? <Text style={styles.confirmationText}>Pickup complete: {displayRequest.pickupCompletedAt}</Text> : null}
+                {displayRequest.sitEndedAt ? <Text style={styles.confirmationText}>Sit ended: {displayRequest.sitEndedAt}</Text> : null}
+                {displayRequest.pointsSettledAt ? <Text style={styles.confirmationText}>Points settled: {displayRequest.pointsSettledAt}</Text> : null}
                 {displayRequest.status === 'confirmed' ? <Text style={styles.confirmationText}>Next: sitter presses after pickup is completed.</Text> : null}
                 {displayRequest.status === 'pickup_complete' ? <Text style={styles.confirmationText}>Pickup completed. Both parties are notified. Next: press when requester arrives and the sit ends.</Text> : null}
                 {displayRequest.status === 'completed' ? <Text style={styles.confirmationText}>Sit ended. Next: settle points.</Text> : null}
                 {displayRequest.status === 'points_settled' ? <Text style={styles.confirmationText}>Points settled. Emergency pickup loop is complete.</Text> : null}
+              </View>
+            ) : null}
+
+            {isEmergency && displayRequest.status === 'points_settled' && displayRequest.emergencyPointBreakdown ? (
+              <View style={styles.pointsBox}>
+                <Text style={styles.pointsTitle}>Emergency points settled</Text>
+                <View style={styles.pointsRow}>
+                  <Text style={styles.pointsNumber}>{displayRequest.emergencyPointBreakdown.totalPoints}</Text>
+                  <Text style={styles.pointsLabel}>total points</Text>
+                </View>
+                <Text style={styles.pointsDetail}>+{displayRequest.emergencyPointBreakdown.yesToPickupBonus} emergency bonus: first YES → daycare pickup</Text>
+                <Text style={styles.pointsDetail}>+{displayRequest.emergencyPointBreakdown.pickupToEndPoints} normal sit points: pickup → requester arrival</Text>
               </View>
             ) : null}
 
@@ -339,6 +355,12 @@ const styles = StyleSheet.create({
   confirmationBox: { backgroundColor: '#f2fff7', borderColor: '#b8e8c8', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
   confirmationTitle: { color: '#20894d', fontWeight: '900', fontSize: 16, marginBottom: 4 },
   confirmationText: { color: '#35634a', lineHeight: 20, marginTop: 4 },
+  pointsBox: { backgroundColor: '#f2fff7', borderColor: '#b8e8c8', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
+  pointsTitle: { color: '#20894d', fontWeight: '900', fontSize: 17, marginBottom: 6 },
+  pointsRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  pointsNumber: { color: '#20894d', fontSize: 40, fontWeight: '900' },
+  pointsLabel: { color: '#35634a', fontWeight: '800' },
+  pointsDetail: { color: '#35634a', lineHeight: 20, marginTop: 4 },
   cancelledBox: { backgroundColor: '#fff0f0', borderColor: '#e87b7b', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 14 },
   cancelledTitle: { color: '#9a1f1f', fontWeight: '900', fontSize: 16, marginBottom: 4 },
   cancelledText: { color: '#9a1f1f', lineHeight: 20, marginTop: 4 },
