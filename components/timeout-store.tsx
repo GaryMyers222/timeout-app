@@ -18,6 +18,15 @@ export type PingEvent = {
 };
 
 export type CancellationScope = 'sit' | 'my_participation' | 'entire_activity';
+export type SitStatus =
+  | 'active'
+  | 'confirmed'
+  | 'pickup_complete'
+  | 'completed'
+  | 'points_settled'
+  | 'timed_out'
+  | 'past_logged'
+  | 'cancelled';
 
 export type SitRequest = {
   id: string;
@@ -32,7 +41,7 @@ export type SitRequest = {
   createdAt: string;
   isPastSit: boolean;
   autoPingMode: AutoPingMode;
-  status: 'active' | 'confirmed' | 'timed_out' | 'past_logged' | 'cancelled';
+  status: SitStatus;
   confirmedSitterName?: string;
   confirmedSitterPhone?: string;
   confirmedSitterAddress?: string;
@@ -51,6 +60,9 @@ type TimeoutStoreValue = {
   cancelActiveRequest: () => void;
   cancelRequest: (requestId: string, scope: CancellationScope, note: string) => void;
   simulateFirstYes: (requestId: string) => void;
+  markPickupComplete: (requestId: string) => void;
+  endSit: (requestId: string) => void;
+  settlePoints: (requestId: string) => void;
   resetMockRequests: () => void;
 };
 
@@ -92,6 +104,10 @@ function buildMockPingEvents(autoPingMode: AutoPingMode, candidates: Candidate[]
 
 function findFirstYes(events: PingEvent[]) {
   return events.find((event) => event.status === 'YES');
+}
+
+function updateRequestStatus(requests: SitRequest[], requestId: string, status: SitStatus) {
+  return requests.map((request) => (request.id === requestId ? { ...request, status } : request));
 }
 
 export function TimeoutStoreProvider({ children }: { children: React.ReactNode }) {
@@ -178,6 +194,9 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
           })
         );
       },
+      markPickupComplete: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'pickup_complete')),
+      endSit: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'completed')),
+      settlePoints: (requestId) => setRequests((current) => updateRequestStatus(current, requestId, 'points_settled')),
       resetMockRequests: () => setRequests([]),
     }),
     [activeRequest, requests]
