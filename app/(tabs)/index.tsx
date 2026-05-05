@@ -3,10 +3,12 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useInviteStore } from '@/components/invite-store';
 import { TIMEOUT_PRESETS, TimeoutPreset } from '@/constants/timeout-rules';
 
 export default function TimeOutHomeScreen() {
   const router = useRouter();
+  const { circleName, pendingInvites, acceptedInvites, members } = useInviteStore();
 
   function openPreset(preset: TimeoutPreset) {
     router.push({ pathname: '/create-sit-request', params: { preset: preset.key } });
@@ -18,6 +20,10 @@ export default function TimeOutHomeScreen() {
 
   function openInviteFlow() {
     router.push('/invite-friends');
+  }
+
+  function openCircleStatus() {
+    router.push('/circle-status');
   }
 
   return (
@@ -38,6 +44,14 @@ export default function TimeOutHomeScreen() {
         </View>
         <Pressable style={styles.inviteHeroButton} onPress={openInviteFlow}>
           <Text style={styles.inviteHeroButtonText}>Build your circle</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.circleStatusCard}>
+        <Text style={styles.circleStatusTitle}>{circleName}</Text>
+        <Text style={styles.circleStatusText}>{members.length} members • {pendingInvites.length} pending invites • {acceptedInvites.length} accepted</Text>
+        <Pressable style={styles.circleStatusButton} onPress={openCircleStatus}>
+          <Text style={styles.circleStatusButtonText}>View circle status</Text>
         </Pressable>
       </View>
 
@@ -111,6 +125,11 @@ const styles = StyleSheet.create({
   trustPill: { color: 'white', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, fontWeight: '800' },
   inviteHeroButton: { backgroundColor: '#ffffff', borderRadius: 18, marginTop: 18, padding: 15 },
   inviteHeroButtonText: { color: '#8b2bbf', fontSize: 16, fontWeight: '900', textAlign: 'center' },
+  circleStatusCard: { backgroundColor: '#ffffff', borderColor: '#f0d8e7', borderRadius: 22, borderWidth: 1, marginBottom: 14, padding: 16 },
+  circleStatusTitle: { color: '#372333', fontSize: 21, fontWeight: '900', marginBottom: 5 },
+  circleStatusText: { color: '#76566a', fontSize: 15, fontWeight: '700', marginBottom: 12 },
+  circleStatusButton: { backgroundColor: '#fff0f7', borderColor: '#f0a8cd', borderRadius: 16, borderWidth: 1, padding: 13 },
+  circleStatusButtonText: { color: '#be185d', fontSize: 15, fontWeight: '900', textAlign: 'center' },
   modeSwitch: { flexDirection: 'row', backgroundColor: '#f2dced', borderRadius: 18, padding: 4, marginBottom: 14 },
   modeButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 14 },
   modeSelected: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
