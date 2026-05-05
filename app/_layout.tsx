@@ -21,6 +21,10 @@ export default function RootLayout() {
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen
+              name="custom-sit-request"
+              options={{ presentation: 'card', title: 'Custom Sit Request' }}
+            />
+            <Stack.Screen
               name="create-sit-request"
               options={{ presentation: 'card', title: 'Create Sit Request' }}
             />
