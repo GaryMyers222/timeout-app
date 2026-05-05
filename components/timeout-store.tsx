@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
+import { getIncludedCandidateIds } from '@/components/ping-order-store';
 import { AutoPingMode, MOCK_CANDIDATES, POINTS_PER_HOUR, SitPresetKey } from '@/constants/timeout-rules';
 
 export type Candidate = {
@@ -98,6 +99,19 @@ function sortCandidatesByDebt(candidates: Candidate[]) {
   return [...candidates].sort((a, b) => a.pointsBalance - b.pointsBalance);
 }
 
+function candidatesForRequest(input: CreateSitRequestInput): Candidate[] {
+  if (input.autoPingMode === 'disabled') return [];
+
+  // Presets stay simple and use the full default ping list. Custom requests use the saved
+  // Ping Order include/exclude selections to preserve parent safety and comfort control.
+  if (input.presetKey === 'custom') {
+    const includedIds = getIncludedCandidateIds();
+    return MOCK_CANDIDATES.filter((candidate) => includedIds.includes(candidate.id));
+  }
+
+  return MOCK_CANDIDATES;
+}
+
 function buildMockPingEvents(autoPingMode: AutoPingMode, candidates: Candidate[]): PingEvent[] {
   if (autoPingMode === 'disabled') return [];
 
@@ -165,7 +179,7 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
       activeRequest,
       createRequest: (input) => {
         const now = new Date();
-        const candidates = input.autoPingMode === 'disabled' ? [] : sortCandidatesByDebt(MOCK_CANDIDATES);
+        const candidates = sortCandidatesByDebt(candidatesForRequest(input));
         const nextRequest: SitRequest = {
           ...input,
           id: `${now.getTime()}`,
