@@ -48,6 +48,7 @@ export default function TabLayout() {
       <Tabs.Screen name="ping-order" options={{ href: null }} />
       <Tabs.Screen name="community" options={{ href: null }} />
       <Tabs.Screen name="invite" options={{ href: null }} />
+      <Tabs.Screen name="safety" options={{ href: null }} />
     </Tabs>
   );
 }
