@@ -22,6 +22,14 @@ export default function RootLayout() {
             name="create-sit-request"
             options={{ presentation: 'card', title: 'Create Sit Request' }}
           />
+          <Stack.Screen
+            name="invite-friends"
+            options={{ presentation: 'card', title: 'Build Your Circle' }}
+          />
+          <Stack.Screen
+            name="invitee-preview"
+            options={{ presentation: 'card', title: 'Private Invite' }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />
