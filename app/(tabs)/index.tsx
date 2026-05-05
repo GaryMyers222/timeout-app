@@ -15,6 +15,10 @@ export default function TimeOutHomeScreen() {
     router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } });
   }
 
+  function openPastSit() {
+    router.push({ pathname: '/create-sit-request', params: { preset: 'custom', mode: 'past' } });
+  }
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
@@ -54,6 +58,14 @@ export default function TimeOutHomeScreen() {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Record an off-app sit</Text>
+        <Text style={styles.helperText}>Use Past Sit when parents arranged a sit outside TimeOut but still want the ledger to reflect the points.</Text>
+        <Pressable style={styles.pastSitButton} onPress={openPastSit}>
+          <Text style={styles.pastSitButtonText}>Record Past Sit</Text>
+        </Pressable>
       </View>
 
       <View style={styles.section}>
@@ -101,6 +113,8 @@ const styles = StyleSheet.create({
   presetTitle: { color: '#372333', fontWeight: '900', fontSize: 16 },
   presetSubtitle: { color: '#76566a', marginTop: 3 },
   chevron: { fontSize: 30, color: '#8b2bbf' },
+  pastSitButton: { backgroundColor: '#8b2bbf', borderRadius: 16, padding: 14, alignItems: 'center' },
+  pastSitButtonText: { color: 'white', fontWeight: '900', fontSize: 16 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   ruleDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f4e6ff', color: '#8b2bbf', fontWeight: '900', textAlign: 'center', lineHeight: 28, marginRight: 10 },
   ruleText: { flex: 1, color: '#372333', fontWeight: '700', lineHeight: 20 },
