@@ -31,13 +31,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="ping-order"
-        options={{
-          title: 'Ping Order',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.number" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="ledger"
         options={{
           title: 'Ledger',
@@ -51,20 +44,9 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.3.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="community"
-        options={{
-          title: 'Community',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="figure.2.and.child.holdinghands" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="invite"
-        options={{
-          title: 'Invite',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.crop.circle.badge.plus" color={color} />,
-        }}
-      />
+      <Tabs.Screen name="ping-order" options={{ href: null }} />
+      <Tabs.Screen name="community" options={{ href: null }} />
+      <Tabs.Screen name="invite" options={{ href: null }} />
     </Tabs>
   );
 }
