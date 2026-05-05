@@ -52,6 +52,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Community',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="figure.2.and.child.holdinghands" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="invite"
         options={{
           title: 'Invite',
