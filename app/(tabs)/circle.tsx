@@ -1,5 +1,6 @@
+import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTimeoutStore } from '@/components/timeout-store';
 
@@ -23,6 +24,7 @@ function healthLabel(score: number) {
 }
 
 export default function CircleScreen() {
+  const router = useRouter();
   const { requests, transfers } = useTimeoutStore();
 
   const stats = useMemo(() => {
@@ -48,6 +50,17 @@ export default function CircleScreen() {
         <Text style={styles.kicker}>Circle</Text>
         <Text style={styles.title}>Blue Group</Text>
         <Text style={styles.tagline}>A healthy circle has trusted members, current phone contacts, and enough activity for points to circulate.</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Circle tools</Text>
+        <Text style={styles.helperText}>Secondary tools live here so the phone tab bar stays simple.</Text>
+        <View style={styles.toolGrid}>
+          <ToolButton title="Invite Friends" subtitle="Invite vs Share" onPress={() => router.push('/invite')} />
+          <ToolButton title="Ping Order" subtitle="Candidate control" onPress={() => router.push('/ping-order')} />
+          <ToolButton title="Community" subtitle="Playdates + gatherings" onPress={() => router.push('/community')} />
+          <ToolButton title="Ledger" subtitle="Points + transfers" onPress={() => router.push('/ledger')} />
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -124,6 +137,15 @@ export default function CircleScreen() {
   );
 }
 
+function ToolButton({ title, subtitle, onPress }: { title: string; subtitle: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.toolButton} onPress={onPress}>
+      <Text style={styles.toolTitle}>{title}</Text>
+      <Text style={styles.toolSubtitle}>{subtitle}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff7fb' },
   content: { padding: 18, paddingBottom: 40 },
@@ -134,6 +156,10 @@ const styles = StyleSheet.create({
   section: { backgroundColor: 'white', borderRadius: 22, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#f0d8e7' },
   sectionTitle: { fontSize: 21, fontWeight: '900', color: '#372333', marginBottom: 8 },
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
+  toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  toolButton: { width: '48%', backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14 },
+  toolTitle: { color: '#372333', fontWeight: '900', fontSize: 16 },
+  toolSubtitle: { color: '#76566a', marginTop: 4 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: { width: '48%', backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14 },
   statNumber: { color: '#8b2bbf', fontSize: 30, fontWeight: '900' },
