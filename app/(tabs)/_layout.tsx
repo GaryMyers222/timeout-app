@@ -37,6 +37,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="invite"
+        options={{
+          title: 'Invite',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.crop.circle.badge.plus" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
