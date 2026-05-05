@@ -1,7 +1,9 @@
+import * as Contacts from 'expo-contacts';
 import { Image } from 'expo-image';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type InviteContact = {
   id: string;
@@ -9,40 +11,70 @@ type InviteContact = {
   role: string;
   phone: string;
   hint: string;
+  source: 'mock' | 'device' | 'manual';
 };
 
-const SUGGESTED_CONTACTS: InviteContact[] = [
-  { id: 'sarah', name: 'Sarah M.', role: 'Nearby preschool family', phone: '(555) 013-2021', hint: 'Kids already know each other' },
-  { id: 'emily', name: 'Emily R.', role: 'Neighborhood parent', phone: '(555) 013-2044', hint: 'Good first circle invite' },
-  { id: 'jen', name: 'Jen K.', role: 'School friend family', phone: '(555) 013-2198', hint: 'Often needs date-night backup' },
-  { id: 'linda', name: 'Grandma Linda', role: 'Trusted family helper', phone: '(555) 013-2671', hint: 'Useful for emergency pickup edge cases' },
-  { id: 'maya', name: 'Maya P.', role: 'Playdate family', phone: '(555) 013-3002', hint: 'Social sits may feel natural' },
-  { id: 'anna', name: 'Anna T.', role: 'Nearby parent friend', phone: '(555) 013-3310', hint: 'Likely to want TimeOut too' },
+const MOCK_CONTACTS: InviteContact[] = [
+  { id: 'sarah', name: 'Sarah M.', role: 'Nearby preschool family', phone: '(555) 013-2021', hint: 'Kids already know each other', source: 'mock' },
+  { id: 'emily', name: 'Emily R.', role: 'Neighborhood parent', phone: '(555) 013-2044', hint: 'Good first circle invite', source: 'mock' },
+  { id: 'jen', name: 'Jen K.', role: 'School friend family', phone: '(555) 013-2198', hint: 'Often needs date-night backup', source: 'mock' },
+  { id: 'linda', name: 'Grandma Linda', role: 'Trusted family helper', phone: '(555) 013-2671', hint: 'Useful for emergency pickup edge cases', source: 'mock' },
+  { id: 'maya', name: 'Maya P.', role: 'Playdate family', phone: '(555) 013-3002', hint: 'Social sits may feel natural', source: 'mock' },
+  { id: 'anna', name: 'Anna T.', role: 'Nearby parent friend', phone: '(555) 013-3310', hint: 'Likely to want TimeOut too', source: 'mock' },
 ];
 
-const INVITE_MESSAGE =
-  'Hi [Name] — [Inviter] invited you to join their private TimeOut babysitting circle. TimeOut helps trusted friends trade occasional babysitting. No strangers, no public listing, no credit card needed. Open your invite: [link]';
+const INVITER_NAME = 'Sarah';
+const INVITE_LINK = 'https://timeout.example/invite/sarah-circle';
+
+function buildInviteMessage(inviteeName: string) {
+  const firstName = inviteeName.split(' ')[0] || inviteeName;
+  return `Hi ${firstName} — ${INVITER_NAME} invited you to join their private TimeOut babysitting circle. TimeOut helps trusted friends trade occasional babysitting. No strangers, no public listing, no credit card needed. Open your invite: ${INVITE_LINK}`;
+}
+
+function buildSmsUrl(contact: InviteContact) {
+  const separator = Platform.OS === 'ios' ? '&' : '?';
+  return `sms:${encodeURIComponent(contact.phone)}${separator}body=${encodeURIComponent(buildInviteMessage(contact.name))}`;
+}
+
+function mapDeviceContact(contact: Contacts.Contact): InviteContact | null {
+  const phone = contact.phoneNumbers?.[0]?.number;
+  if (!phone) return null;
+
+  return {
+    id: `device-${contact.id ?? `${contact.name}-${phone}`}`,
+    name: contact.name || contact.firstName || 'Unnamed contact',
+    role: 'From native contacts',
+    phone,
+    hint: 'You choose whether this is a good TimeOut invite',
+    source: 'device',
+  };
+}
 
 export default function InviteFriendsScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [contacts, setContacts] = useState<InviteContact[]>(MOCK_CONTACTS);
   const [selectedIds, setSelectedIds] = useState<string[]>(['sarah', 'emily', 'jen']);
   const [searchText, setSearchText] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [sentInvites, setSentInvites] = useState<InviteContact[]>([]);
+  const [contactsLoaded, setContactsLoaded] = useState(false);
+  const [contactsMessage, setContactsMessage] = useState('');
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [smsQueueIndex, setSmsQueueIndex] = useState(0);
 
   const selectedContacts = useMemo(
-    () => SUGGESTED_CONTACTS.filter((contact) => selectedIds.includes(contact.id)),
-    [selectedIds]
+    () => contacts.filter((contact) => selectedIds.includes(contact.id)),
+    [contacts, selectedIds]
   );
 
   const filteredContacts = useMemo(() => {
     const query = searchText.trim().toLowerCase();
-    if (!query) return SUGGESTED_CONTACTS;
-    return SUGGESTED_CONTACTS.filter((contact) =>
-      `${contact.name} ${contact.role} ${contact.hint}`.toLowerCase().includes(query)
+    if (!query) return contacts;
+    return contacts.filter((contact) =>
+      `${contact.name} ${contact.role} ${contact.hint} ${contact.phone}`.toLowerCase().includes(query)
     );
-  }, [searchText]);
+  }, [contacts, searchText]);
 
   function toggleContact(id: string) {
     setSelectedIds((current) =>
@@ -50,29 +82,112 @@ export default function InviteFriendsScreen() {
     );
   }
 
+  async function loadDeviceContacts() {
+    setIsLoadingContacts(true);
+    setContactsMessage('');
+
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        setContactsMessage('Contact access was not granted. You can still enter phone numbers manually.');
+        return;
+      }
+
+      const result = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers],
+        pageSize: 250,
+        sort: Contacts.SortTypes.FirstName,
+      });
+
+      const deviceContacts = result.data.map(mapDeviceContact).filter(Boolean) as InviteContact[];
+
+      if (deviceContacts.length === 0) {
+        setContactsMessage('No phone contacts were found. You can still enter phone numbers manually.');
+        return;
+      }
+
+      setContacts(deviceContacts);
+      setSelectedIds([]);
+      setContactsLoaded(true);
+      setContactsMessage(`Loaded ${deviceContacts.length} phone contacts. Choose only trusted people you want to invite.`);
+    } catch (error) {
+      setContactsMessage('Could not load contacts on this device. The mock list and manual phone entry are still available.');
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  }
+
+  function useMockContacts() {
+    setContacts(MOCK_CONTACTS);
+    setSelectedIds(['sarah', 'emily', 'jen']);
+    setContactsLoaded(false);
+    setContactsMessage('Using the safe mock contact list for product review.');
+  }
+
   function addManualInvite() {
     const phone = manualPhone.trim();
     if (!phone) return;
     const id = `manual-${Date.now()}`;
-    SUGGESTED_CONTACTS.push({
+    const manualContact: InviteContact = {
       id,
       name: 'Manual invite',
       role: 'Entered by phone number',
       phone,
       hint: 'No contact permission needed',
-    });
+      source: 'manual',
+    };
+    setContacts((current) => [manualContact, ...current]);
     setSelectedIds((current) => [...current, id]);
     setManualPhone('');
   }
 
-  function sendInvites() {
+  async function openSmsForContact(contact: InviteContact) {
+    const smsUrl = buildSmsUrl(contact);
+    const canOpen = await Linking.canOpenURL(smsUrl);
+
+    if (!canOpen) {
+      Alert.alert('SMS not available', 'This device or browser cannot open a text message. The invite is still saved in this screen for review.');
+      return false;
+    }
+
+    await Linking.openURL(smsUrl);
+    return true;
+  }
+
+  async function sendInvites() {
+    if (selectedContacts.length === 0) return;
+
+    const nextContact = selectedContacts[smsQueueIndex];
+    const opened = await openSmsForContact(nextContact);
+
+    if (opened) {
+      const nextQueueIndex = smsQueueIndex + 1;
+      setSmsQueueIndex(nextQueueIndex);
+      if (nextQueueIndex < selectedContacts.length) {
+        Alert.alert(
+          'Send next invite',
+          `After you send or cancel the text to ${nextContact.name}, return to TimeOut and tap Send next invite.`
+        );
+        return;
+      }
+    }
+
     setSentInvites(selectedContacts);
     setStep(5);
+  }
+
+  function resetSmsQueue() {
+    setSmsQueueIndex(0);
+    setSentInvites([]);
   }
 
   function openInviteePreview() {
     router.push('/invitee-preview');
   }
+
+  const smsPreviewContact = selectedContacts[0];
+  const smsPreviewText = smsPreviewContact ? buildInviteMessage(smsPreviewContact.name) : buildInviteMessage('[Name]');
+  const nextInviteName = selectedContacts[smsQueueIndex]?.name;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -155,10 +270,10 @@ export default function InviteFriendsScreen() {
 
       {step === 4 ? (
         <View>
-          <Text style={styles.kicker}>NATIVE CONTACTS MOCK</Text>
+          <Text style={styles.kicker}>NATIVE CONTACTS</Text>
           <Text style={styles.title}>Choose trusted families</Text>
           <Text style={styles.bodyText}>
-            This mock screen preserves the intended UX. In the production build, this button will open the phone’s native contact picker after permission.
+            TimeOut can open your phone contacts so you can choose trusted friends. It will not invite anyone unless you select them and send the text.
           </Text>
           <View style={styles.trustPanel}>
             <TrustBullet text="We do not invite anyone automatically." />
@@ -166,6 +281,18 @@ export default function InviteFriendsScreen() {
             <TrustBullet text="No one joins unless they accept." />
             <TrustBullet text="No credit card needed. Cancel anytime." />
           </View>
+
+          <View style={styles.contactActionRow}>
+            <Pressable style={styles.contactLoadButton} onPress={loadDeviceContacts} disabled={isLoadingContacts}>
+              <Text style={styles.contactLoadButtonText}>{isLoadingContacts ? 'Loading contacts...' : 'Load phone contacts'}</Text>
+            </Pressable>
+            <Pressable style={styles.mockButton} onPress={useMockContacts}>
+              <Text style={styles.mockButtonText}>Use mock list</Text>
+            </Pressable>
+          </View>
+
+          {contactsMessage ? <Text style={styles.contactsMessage}>{contactsMessage}</Text> : null}
+          {contactsLoaded ? <Text style={styles.contactsSource}>Showing real phone contacts from this device.</Text> : <Text style={styles.contactsSource}>Showing safe mock contacts until phone contacts are loaded.</Text>}
 
           <TextInput
             style={styles.searchInput}
@@ -182,6 +309,7 @@ export default function InviteFriendsScreen() {
               placeholderTextColor="#9c6a82"
               value={manualPhone}
               onChangeText={setManualPhone}
+              keyboardType="phone-pad"
             />
             <Pressable style={styles.addButton} onPress={addManualInvite}>
               <Text style={styles.addButtonText}>Add</Text>
@@ -206,7 +334,10 @@ export default function InviteFriendsScreen() {
           <Pressable
             style={[styles.primaryButton, selectedContacts.length === 0 && styles.disabledButton]}
             disabled={selectedContacts.length === 0}
-            onPress={() => setStep(5)}>
+            onPress={() => {
+              resetSmsQueue();
+              setStep(5);
+            }}>
             <Text style={styles.primaryButtonText}>Review invites</Text>
           </Pressable>
         </View>
@@ -218,7 +349,7 @@ export default function InviteFriendsScreen() {
             <>
               <Text style={styles.kicker}>REVIEW</Text>
               <Text style={styles.title}>Review your invites</Text>
-              <Text style={styles.bodyText}>We’ll send one simple text to each person below. No one is added unless they choose to join.</Text>
+              <Text style={styles.bodyText}>We’ll open one text at a time. No one is added unless they choose to join.</Text>
               {selectedContacts.map((contact) => (
                 <View key={contact.id} style={styles.reviewCard}>
                   <Text style={styles.contactName}>{contact.name}</Text>
@@ -227,10 +358,11 @@ export default function InviteFriendsScreen() {
               ))}
               <View style={styles.smsPreview}>
                 <Text style={styles.smsLabel}>SMS preview</Text>
-                <Text style={styles.smsText}>{INVITE_MESSAGE}</Text>
+                <Text style={styles.smsText}>{smsPreviewText}</Text>
               </View>
+              {nextInviteName ? <Text style={styles.contactsMessage}>Next text: {nextInviteName}</Text> : null}
               <Pressable style={styles.primaryButton} onPress={sendInvites}>
-                <Text style={styles.primaryButtonText}>Send invites</Text>
+                <Text style={styles.primaryButtonText}>{smsQueueIndex === 0 ? 'Send first invite' : 'Send next invite'}</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={() => setStep(4)}>
                 <Text style={styles.secondaryButtonText}>Edit list</Text>
@@ -239,14 +371,14 @@ export default function InviteFriendsScreen() {
           ) : (
             <>
               <Text style={styles.kicker}>SENT</Text>
-              <Text style={styles.title}>Invites sent</Text>
+              <Text style={styles.title}>Invites started</Text>
               <Text style={styles.bodyText}>
                 You’re building your TimeOut circle. When a few friends join, you can send a real sit request and AutoPing can look for the first available sitter.
               </Text>
               {sentInvites.map((contact) => (
                 <View key={contact.id} style={styles.reviewCard}>
                   <Text style={styles.contactName}>{contact.name}</Text>
-                  <Text style={styles.statusText}>Invited by SMS</Text>
+                  <Text style={styles.statusText}>SMS opened for invite</Text>
                 </View>
               ))}
               <Pressable style={styles.primaryButton} onPress={() => router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } })}>
@@ -331,6 +463,13 @@ const styles = StyleSheet.create({
   trustBulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   trustBulletIcon: { color: '#be185d', fontSize: 16, fontWeight: '900', marginRight: 10 },
   trustBulletText: { color: '#63324f', flex: 1, fontSize: 15, fontWeight: '700', lineHeight: 21 },
+  contactActionRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  contactLoadButton: { flex: 1, backgroundColor: '#be185d', borderRadius: 16, padding: 14 },
+  contactLoadButtonText: { color: '#ffffff', fontWeight: '900', textAlign: 'center' },
+  mockButton: { backgroundColor: '#ffffff', borderColor: '#ecc3d9', borderRadius: 16, borderWidth: 1, padding: 14 },
+  mockButtonText: { color: '#8a1859', fontWeight: '900', textAlign: 'center' },
+  contactsMessage: { color: '#8a1859', fontSize: 14, fontWeight: '800', lineHeight: 20, marginBottom: 8 },
+  contactsSource: { color: '#7b4a65', fontSize: 13, fontWeight: '700', marginBottom: 10 },
   searchInput: { backgroundColor: '#ffffff', borderColor: '#ecc3d9', borderRadius: 16, borderWidth: 1, color: '#4a1038', fontSize: 16, marginBottom: 10, padding: 14 },
   manualRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   manualInput: { flex: 1 },
