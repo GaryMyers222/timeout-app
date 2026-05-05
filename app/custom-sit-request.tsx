@@ -7,11 +7,30 @@ import { calculateSitPoints, durationToHours, KidCount, LocationType } from '@/c
 
 type Meridiem = 'AM' | 'PM';
 
-const HOURS = ['7', '8', '9', '10', '11', '12', '1', '2', '3', '4', '5', '6'];
+type DateChoice = {
+  key: string;
+  label: string;
+  sublabel: string;
+};
+
+const HOURS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 const MINUTES = ['00', '15', '30', '45'];
-const DURATION_HOURS = ['1', '2', '3', '4', '5', '6'];
-const DURATION_MINUTES = ['00', '30'];
-const DATE_CHOICES = ['Today', 'Tomorrow', 'This Weekend'];
+const DURATION_HOURS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+const DURATION_MINUTES = ['00', '15', '30', '45'];
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function buildDateChoices(): DateChoice[] {
+  const today = new Date();
+  return Array.from({ length: 14 }).map((_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const label = index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : WEEKDAY_NAMES[date.getDay()];
+    const sublabel = `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
+    return { key, label, sublabel };
+  });
+}
 
 function displayDuration(hour: string, minute: string) {
   return `${hour}:${minute}`;
@@ -20,7 +39,9 @@ function displayDuration(hour: string, minute: string) {
 export default function CustomSitRequestScreen() {
   const router = useRouter();
   const { createRequest } = useTimeoutStore();
-  const [dateLabel, setDateLabel] = useState('Tomorrow');
+  const dateChoices = useMemo(() => buildDateChoices(), []);
+  const [selectedDateKey, setSelectedDateKey] = useState(dateChoices[1]?.key ?? 'Tomorrow');
+  const [manualDateLabel, setManualDateLabel] = useState('');
   const [selectedHour, setSelectedHour] = useState('7');
   const [selectedMinute, setSelectedMinute] = useState('00');
   const [selectedMeridiem, setSelectedMeridiem] = useState<Meridiem>('PM');
@@ -32,8 +53,11 @@ export default function CustomSitRequestScreen() {
   const [validationMessage, setValidationMessage] = useState('');
   const [showReview, setShowReview] = useState(false);
 
+  const selectedDateChoice = dateChoices.find((choice) => choice.key === selectedDateKey);
+  const dateLabel = manualDateLabel.trim() || (selectedDateChoice ? `${selectedDateChoice.label}, ${selectedDateChoice.sublabel}` : selectedDateKey);
   const startTimeDisplay = `${selectedHour}:${selectedMinute} ${selectedMeridiem}`;
   const durationDisplay = displayDuration(durationHour, durationMinute);
+  const estimatedEndNote = `Estimated end: start time + ${durationDisplay} hours`;
 
   const pointBreakdown = useMemo(() => calculateSitPoints({
     durationHours: durationToHours(durationHour, durationMinute),
@@ -43,7 +67,7 @@ export default function CustomSitRequestScreen() {
   }), [durationHour, durationMinute, selectedKids, selectedLocation]);
 
   function validate() {
-    if (!dateLabel.trim()) return 'Add a date so friends know when you need help.';
+    if (!dateLabel.trim()) return 'Choose a date from the calendar or type one.';
     if (durationHour === '0' && durationMinute === '00') return 'Choose a duration.';
     return '';
   }
@@ -86,8 +110,8 @@ export default function CustomSitRequestScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
         <Text style={styles.kicker}>CUSTOM SIT REQUEST V1 DRAFT</Text>
-        <Text style={styles.title}>Ask for the sit you actually need</Text>
-        <Text style={styles.bodyText}>Presets sell the dream, but most real use may start here. Review before AutoPing so the parent stays in control.</Text>
+        <Text style={styles.title}>Pick date, time, and duration fast</Text>
+        <Text style={styles.bodyText}>The August stories call for a standard calendar date picker, then tap-select matrices for start time and duration.</Text>
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>AutoPing behavior</Text>
           <Text style={styles.infoText}>This is not broadcast spam. TimeOut asks trusted members in a careful order until the first YES.</Text>
@@ -97,51 +121,53 @@ export default function CustomSitRequestScreen() {
       {validationMessage ? <View style={styles.errorBox}><Text style={styles.errorText}>{validationMessage}</Text></View> : null}
 
       <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>When?</Text>
-        <View style={styles.dateRow}>
-          {DATE_CHOICES.map((choice) => (
-            <Pressable key={choice} style={[styles.choiceButton, dateLabel === choice && styles.choiceButtonSelected]} onPress={() => setDateLabel(choice)}>
-              <Text style={[styles.choiceText, dateLabel === choice && styles.choiceTextSelected]}>{choice}</Text>
+        <Text style={styles.sectionTitle}>Sit date</Text>
+        <Text style={styles.helperText}>Calendar-style quick picker. Native calendar/date picker can replace this scaffold later.</Text>
+        <View style={styles.calendarGrid}>
+          {dateChoices.map((choice) => (
+            <Pressable key={choice.key} style={[styles.dateTile, selectedDateKey === choice.key && !manualDateLabel.trim() && styles.dateTileSelected]} onPress={() => { setSelectedDateKey(choice.key); setManualDateLabel(''); }}>
+              <Text style={[styles.dateTileLabel, selectedDateKey === choice.key && !manualDateLabel.trim() && styles.dateTileTextSelected]}>{choice.label}</Text>
+              <Text style={[styles.dateTileSubLabel, selectedDateKey === choice.key && !manualDateLabel.trim() && styles.dateTileTextSelected]}>{choice.sublabel}</Text>
             </Pressable>
           ))}
         </View>
-        <TextInput style={styles.input} value={dateLabel} onChangeText={setDateLabel} placeholder="Or type a date" placeholderTextColor="#9c6a82" />
+        <TextInput style={styles.input} value={manualDateLabel} onChangeText={setManualDateLabel} placeholder="Or type a specific date" placeholderTextColor="#9c6a82" />
       </View>
 
       <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Start time</Text>
+        <Text style={styles.sectionTitle}>Sit start time</Text>
         <Text style={styles.selectedValue}>Selected: {startTimeDisplay}</Text>
-        <Text style={styles.gridLabel}>Hour</Text>
-        <View style={styles.grid}>{HOURS.map((hour) => <GridButton key={hour} label={hour} selected={selectedHour === hour} onPress={() => setSelectedHour(hour)} />)}</View>
-        <Text style={styles.gridLabel}>Minute</Text>
-        <View style={styles.grid}>{MINUTES.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={selectedMinute === minute} onPress={() => setSelectedMinute(minute)} />)}</View>
-        <Text style={styles.gridLabel}>AM / PM</Text>
-        <View style={styles.row}>
-          <OptionButton title="AM" selected={selectedMeridiem === 'AM'} onPress={() => setSelectedMeridiem('AM')} />
-          <OptionButton title="PM" selected={selectedMeridiem === 'PM'} onPress={() => setSelectedMeridiem('PM')} />
+        <Text style={styles.gridLabel}>Hour — 6 columns x 2 rows</Text>
+        <View style={styles.sixColumnGrid}>{HOURS.map((hour) => <GridButton key={hour} label={hour} selected={selectedHour === hour} onPress={() => setSelectedHour(hour)} />)}</View>
+        <Text style={styles.gridLabel}>Minute + AM/PM — third row</Text>
+        <View style={styles.sixColumnGrid}>
+          {MINUTES.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={selectedMinute === minute} onPress={() => setSelectedMinute(minute)} />)}
+          <GridButton label="AM" selected={selectedMeridiem === 'AM'} onPress={() => setSelectedMeridiem('AM')} />
+          <GridButton label="PM" selected={selectedMeridiem === 'PM'} onPress={() => setSelectedMeridiem('PM')} />
         </View>
       </View>
 
       <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Duration</Text>
+        <Text style={styles.sectionTitle}>Estimated duration</Text>
         <Text style={styles.selectedValue}>Selected: {durationDisplay} hours</Text>
         <Text style={styles.gridLabel}>Hours</Text>
-        <View style={styles.grid}>{DURATION_HOURS.map((hour) => <GridButton key={hour} label={hour} selected={durationHour === hour} onPress={() => setDurationHour(hour)} />)}</View>
+        <View style={styles.sixColumnGrid}>{DURATION_HOURS.map((hour) => <GridButton key={hour} label={hour} selected={durationHour === hour} onPress={() => setDurationHour(hour)} />)}</View>
         <Text style={styles.gridLabel}>Minutes</Text>
-        <View style={styles.grid}>{DURATION_MINUTES.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={durationMinute === minute} onPress={() => setDurationMinute(minute)} />)}</View>
+        <View style={styles.fourColumnGrid}>{DURATION_MINUTES.map((minute) => <GridButton key={minute} label={`:${minute}`} selected={durationMinute === minute} onPress={() => setDurationMinute(minute)} />)}</View>
+        <Text style={styles.helperText}>{estimatedEndNote}. Sit duration and estimated end time mean the same thing.</Text>
       </View>
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Sit details</Text>
         <Text style={styles.gridLabel}>Kids</Text>
         <View style={styles.row}>
-          <OptionButton title="One Child" subtitle="Standard ask" selected={selectedKids === '1 Child'} onPress={() => setSelectedKids('1 Child')} />
-          <OptionButton title="2+ Children" subtitle="Bigger ask" selected={selectedKids === '2+ Children'} onPress={() => setSelectedKids('2+ Children')} />
+          <OptionButton title="1 Child" subtitle="Standard ask" selected={selectedKids === '1 Child'} onPress={() => setSelectedKids('1 Child')} />
+          <OptionButton title="2+ Children" subtitle="Adds 4 points" selected={selectedKids === '2+ Children'} onPress={() => setSelectedKids('2+ Children')} />
         </View>
         <Text style={styles.gridLabel}>Location</Text>
         <View style={styles.row}>
-          <OptionButton title="Drop-off" subtitle="At sitter's place" selected={selectedLocation === 'Drop-off'} onPress={() => setSelectedLocation('Drop-off')} />
-          <OptionButton title="My Place" subtitle="Sitter comes to you" selected={selectedLocation === 'My Place'} onPress={() => setSelectedLocation('My Place')} />
+          <OptionButton title="Drop-off" subtitle="Default" selected={selectedLocation === 'Drop-off'} onPress={() => setSelectedLocation('Drop-off')} />
+          <OptionButton title="My Place" subtitle="Often date night" selected={selectedLocation === 'My Place'} onPress={() => setSelectedLocation('My Place')} />
         </View>
       </View>
 
@@ -207,22 +233,25 @@ const styles = StyleSheet.create({
   kicker: { color: '#be185d', fontSize: 12, fontWeight: '900', letterSpacing: 1.6, marginBottom: 8 },
   title: { color: '#4a1038', fontSize: 31, fontWeight: '900', lineHeight: 36, marginBottom: 10 },
   bodyText: { color: '#7b4a65', fontSize: 15, lineHeight: 22, marginTop: 8 },
+  helperText: { color: '#7b4a65', fontSize: 14, fontWeight: '700', lineHeight: 20, marginBottom: 10 },
   infoBox: { backgroundColor: '#fff0f7', borderColor: '#f0a8cd', borderRadius: 18, borderWidth: 1, marginTop: 12, padding: 13 },
   infoTitle: { color: '#8a1859', fontSize: 15, fontWeight: '900', marginBottom: 4 },
   infoText: { color: '#7b4a65', fontSize: 14, lineHeight: 20 },
   sectionCard: { backgroundColor: '#ffffff', borderColor: '#f3d2e3', borderRadius: 24, borderWidth: 1, marginBottom: 14, padding: 16 },
   sectionTitle: { color: '#4a1038', fontSize: 21, fontWeight: '900', marginBottom: 10 },
-  dateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  choiceButton: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11 },
-  choiceButtonSelected: { backgroundColor: '#be185d', borderColor: '#be185d' },
-  choiceText: { color: '#5b123d', fontWeight: '900' },
-  choiceTextSelected: { color: '#ffffff' },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  dateTile: { width: '30.7%', backgroundColor: '#fffafd', borderColor: '#ead2e2', borderRadius: 16, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 11 },
+  dateTileSelected: { backgroundColor: '#be185d', borderColor: '#be185d' },
+  dateTileLabel: { color: '#5b123d', fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  dateTileSubLabel: { color: '#9c6a82', fontSize: 12, fontWeight: '800', marginTop: 3, textAlign: 'center' },
+  dateTileTextSelected: { color: '#ffffff' },
   input: { backgroundColor: '#fffafd', borderColor: '#ecc3d9', borderRadius: 16, borderWidth: 1, color: '#4a1038', fontSize: 16, padding: 14 },
   multilineInput: { minHeight: 105, textAlignVertical: 'top' },
   selectedValue: { color: '#7b4a65', fontSize: 15, fontWeight: '700', marginBottom: 10 },
   gridLabel: { color: '#a21661', fontSize: 13, fontWeight: '900', letterSpacing: 0.7, marginBottom: 8, marginTop: 8, textTransform: 'uppercase' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  gridButton: { alignItems: 'center', backgroundColor: '#fffafd', borderColor: '#ead2e2', borderRadius: 14, borderWidth: 1, minWidth: 58, paddingHorizontal: 10, paddingVertical: 12 },
+  sixColumnGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  fourColumnGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  gridButton: { alignItems: 'center', backgroundColor: '#fffafd', borderColor: '#ead2e2', borderRadius: 14, borderWidth: 1, minWidth: 50, paddingHorizontal: 8, paddingVertical: 12 },
   gridButtonSelected: { backgroundColor: '#be185d', borderColor: '#be185d' },
   gridButtonText: { color: '#5b123d', fontSize: 16, fontWeight: '900' },
   gridButtonTextSelected: { color: '#ffffff' },
