@@ -1,20 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { MOCK_CANDIDATES } from '@/constants/timeout-rules';
-
-type CandidateOverride = {
-  id: string;
-  included: boolean;
-  reason?: string;
-};
-
-function defaultOverrides() {
-  return MOCK_CANDIDATES.reduce<Record<string, CandidateOverride>>((acc, candidate) => {
-    acc[candidate.id] = { id: candidate.id, included: true };
-    return acc;
-  }, {});
-}
+import { resetCandidateSelection, setCandidateIncluded, usePingOrderSelection } from '@/components/ping-order-store';
 
 function formatBalance(points: number) {
   if (points > 0) return `+${points}`;
@@ -26,32 +13,22 @@ function isSpecialCandidate(id: string) {
 }
 
 export default function PingOrderScreen() {
-  const [overrides, setOverrides] = useState(defaultOverrides);
+  const { candidates, excluded, included, resetCandidateSelection: resetSelection } = usePingOrderSelection();
   const [showEducation, setShowEducation] = useState(true);
   const [presetFlow, setPresetFlow] = useState(false);
 
   const orderedCandidates = useMemo(() => {
-    return [...MOCK_CANDIDATES].sort((a, b) => a.pointsBalance - b.pointsBalance);
-  }, []);
+    return [...candidates].sort((a, b) => a.pointsBalance - b.pointsBalance);
+  }, [candidates]);
 
-  const includedCandidates = orderedCandidates.filter((candidate) => overrides[candidate.id]?.included);
-  const excludedCandidates = orderedCandidates.filter((candidate) => !overrides[candidate.id]?.included);
-
-  function toggleCandidate(id: string) {
+  function toggleCandidate(id: string, currentlyIncluded: boolean) {
     if (presetFlow) return;
-
-    setOverrides((current) => ({
-      ...current,
-      [id]: {
-        id,
-        included: !current[id]?.included,
-        reason: current[id]?.included ? 'Requester safety/comfort exclusion' : undefined,
-      },
-    }));
+    setCandidateIncluded(id, !currentlyIncluded);
   }
 
   function resetOrder() {
-    setOverrides(defaultOverrides());
+    resetCandidateSelection();
+    resetSelection();
   }
 
   return (
@@ -95,7 +72,7 @@ export default function PingOrderScreen() {
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>TimeOut contacts - ping order</Text>
-            <Text style={styles.helperText}>{includedCandidates.length} included • {excludedCandidates.length} excluded</Text>
+            <Text style={styles.helperText}>{included.length} included • {excluded.length} excluded</Text>
           </View>
           <Pressable onPress={resetOrder} style={styles.resetButton}>
             <Text style={styles.resetText}>Reset</Text>
@@ -103,29 +80,45 @@ export default function PingOrderScreen() {
         </View>
 
         {orderedCandidates.map((candidate, index) => {
-          const included = overrides[candidate.id]?.included;
+          const includedNow = candidate.included;
           const special = isSpecialCandidate(candidate.id);
           return (
             <Pressable
               key={candidate.id}
-              onPress={() => toggleCandidate(candidate.id)}
-              style={[styles.candidateCard, !included && styles.excludedCard, presetFlow && styles.lockedCard]}>
+              onPress={() => toggleCandidate(candidate.id, includedNow)}
+              style={[styles.candidateCard, !includedNow && styles.excludedCard, presetFlow && styles.lockedCard]}>
               <View style={styles.orderCircle}><Text style={styles.orderText}>{index + 1}</Text></View>
               <View style={styles.candidateCopy}>
                 <Text style={styles.candidateName}>{candidate.name}</Text>
                 <Text style={styles.candidateMeta}>{special ? 'Special contact / edge case' : candidate.channel === 'sms' ? 'SMS fallback' : 'App user'}</Text>
-                {!included ? <Text style={styles.exclusionReason}>Excluded: safety/comfort choice</Text> : null}
+                {!includedNow ? <Text style={styles.exclusionReason}>Excluded: safety/comfort choice</Text> : null}
               </View>
               <View style={styles.balanceBox}>
                 <Text style={styles.balance}>{formatBalance(candidate.pointsBalance)}</Text>
                 <Text style={styles.balanceLabel}>pts</Text>
               </View>
-              <View style={[styles.checkCircle, included && styles.checkCircleIncluded]}>
-                <Text style={[styles.checkText, included && styles.checkTextIncluded]}>{included ? '✓' : '–'}</Text>
+              <View style={[styles.checkCircle, includedNow && styles.checkCircleIncluded]}>
+                <Text style={[styles.checkText, includedNow && styles.checkTextIncluded]}>{includedNow ? '✓' : '–'}</Text>
               </View>
             </Pressable>
           );
         })}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Saved selection behavior</Text>
+        <Text style={styles.helperText}>Custom Sit Request now uses this saved include/exclude list. Presets continue to use the full default list to stay one-tap and low-friction.</Text>
+        {excluded.length > 0 ? (
+          <View style={styles.messageBox}>
+            <Text style={styles.messageTitle}>Excluded from custom requests</Text>
+            <Text style={styles.messageText}>{excluded.map((candidate) => candidate.name).join(', ')}</Text>
+          </View>
+        ) : (
+          <View style={styles.messageBox}>
+            <Text style={styles.messageTitle}>All candidates included</Text>
+            <Text style={styles.messageText}>Custom requests will use the debt-first default order.</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -190,6 +183,7 @@ const styles = StyleSheet.create({
   checkText: { color: '#9a1f1f', fontWeight: '900' },
   checkTextIncluded: { color: 'white' },
   messageBox: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12 },
+  messageTitle: { color: '#372333', fontWeight: '900', marginBottom: 6 },
   messageText: { color: '#52364b', lineHeight: 20 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   ruleDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f4e6ff', color: '#8b2bbf', fontWeight: '900', textAlign: 'center', lineHeight: 28, marginRight: 10 },
