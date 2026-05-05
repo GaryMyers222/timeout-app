@@ -5,13 +5,15 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CircleInvite, InviteSource, useInviteStore } from '@/components/invite-store';
+
 type InviteContact = {
   id: string;
   name: string;
   role: string;
   phone: string;
   hint: string;
-  source: 'mock' | 'device' | 'manual';
+  source: InviteSource;
 };
 
 const MOCK_CONTACTS: InviteContact[] = [
@@ -23,18 +25,11 @@ const MOCK_CONTACTS: InviteContact[] = [
   { id: 'anna', name: 'Anna T.', role: 'Nearby parent friend', phone: '(555) 013-3310', hint: 'Likely to want TimeOut too', source: 'mock' },
 ];
 
-const INVITER_NAME = 'Sarah';
-const INVITE_LINK = 'https://timeout.example/invite/sarah-circle';
 const IS_WEB = Platform.OS === 'web';
 
-function buildInviteMessage(inviteeName: string) {
-  const firstName = inviteeName.split(' ')[0] || inviteeName;
-  return `Hi ${firstName} — ${INVITER_NAME} invited you to join their private TimeOut babysitting circle. TimeOut helps trusted friends trade occasional babysitting. No strangers, no public listing, no credit card needed. Open your invite: ${INVITE_LINK}`;
-}
-
-function buildSmsUrl(contact: InviteContact) {
+function buildSmsUrl(invite: CircleInvite) {
   const separator = Platform.OS === 'ios' ? '&' : '?';
-  return `sms:${encodeURIComponent(contact.phone)}${separator}body=${encodeURIComponent(buildInviteMessage(contact.name))}`;
+  return `sms:${encodeURIComponent(invite.inviteePhone)}${separator}body=${encodeURIComponent(invite.smsBody)}`;
 }
 
 function mapDeviceContact(contact: Contacts.Contact): InviteContact | null {
@@ -47,22 +42,24 @@ function mapDeviceContact(contact: Contacts.Contact): InviteContact | null {
     role: 'From native contacts',
     phone,
     hint: 'You choose whether this is a good TimeOut invite',
-    source: 'device',
+    source: 'contacts',
   };
 }
 
 export default function InviteFriendsScreen() {
   const router = useRouter();
+  const { circleName, createInvites, markSmsOpened, pendingInvites, acceptedInvites } = useInviteStore();
   const [step, setStep] = useState(0);
   const [contacts, setContacts] = useState<InviteContact[]>(MOCK_CONTACTS);
   const [selectedIds, setSelectedIds] = useState<string[]>(['sarah', 'emily', 'jen']);
   const [searchText, setSearchText] = useState('');
   const [manualPhone, setManualPhone] = useState('');
-  const [sentInvites, setSentInvites] = useState<InviteContact[]>([]);
   const [contactsLoaded, setContactsLoaded] = useState(false);
   const [contactsMessage, setContactsMessage] = useState('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [smsQueueIndex, setSmsQueueIndex] = useState(0);
+  const [inviteRecords, setInviteRecords] = useState<CircleInvite[]>([]);
+  const [reviewComplete, setReviewComplete] = useState(false);
 
   const selectedContacts = useMemo(
     () => contacts.filter((contact) => selectedIds.includes(contact.id)),
@@ -147,13 +144,25 @@ export default function InviteFriendsScreen() {
     setManualPhone('');
   }
 
-  async function openSmsForContact(contact: InviteContact) {
+  function createInviteRecordsForReview() {
+    const nextInvites = createInvites(selectedContacts.map((contact) => ({
+      inviteeName: contact.name,
+      inviteePhone: contact.phone,
+      source: contact.source,
+    })));
+    setInviteRecords(nextInvites);
+    setSmsQueueIndex(0);
+    setReviewComplete(false);
+    setStep(5);
+  }
+
+  async function openSmsForInvite(invite: CircleInvite) {
     if (IS_WEB) {
       Alert.alert('Web preview', 'On a phone, TimeOut opens the native SMS app with this message prefilled. On web, copy the SMS preview text instead.');
       return false;
     }
 
-    const smsUrl = buildSmsUrl(contact);
+    const smsUrl = buildSmsUrl(invite);
     const canOpen = await Linking.canOpenURL(smsUrl);
 
     if (!canOpen) {
@@ -162,49 +171,43 @@ export default function InviteFriendsScreen() {
     }
 
     await Linking.openURL(smsUrl);
+    markSmsOpened(invite.id);
     return true;
   }
 
   async function sendInvites() {
-    if (selectedContacts.length === 0) return;
+    if (inviteRecords.length === 0) return;
 
     if (IS_WEB) {
-      setSentInvites(selectedContacts);
-      setStep(5);
+      setReviewComplete(true);
       return;
     }
 
-    const nextContact = selectedContacts[smsQueueIndex];
-    const opened = await openSmsForContact(nextContact);
+    const nextInvite = inviteRecords[smsQueueIndex];
+    const opened = await openSmsForInvite(nextInvite);
 
     if (opened) {
       const nextQueueIndex = smsQueueIndex + 1;
       setSmsQueueIndex(nextQueueIndex);
-      if (nextQueueIndex < selectedContacts.length) {
+      if (nextQueueIndex < inviteRecords.length) {
         Alert.alert(
           'Send next invite',
-          `After you send or cancel the text to ${nextContact.name}, return to TimeOut and tap Send next invite.`
+          `After you send or cancel the text to ${nextInvite.inviteeName}, return to TimeOut and tap Send next invite.`
         );
         return;
       }
     }
 
-    setSentInvites(selectedContacts);
-    setStep(5);
-  }
-
-  function resetSmsQueue() {
-    setSmsQueueIndex(0);
-    setSentInvites([]);
+    setReviewComplete(true);
   }
 
   function openInviteePreview() {
     router.push('/invitee-preview');
   }
 
-  const smsPreviewContact = selectedContacts[0];
-  const smsPreviewText = smsPreviewContact ? buildInviteMessage(smsPreviewContact.name) : buildInviteMessage('[Name]');
-  const nextInviteName = selectedContacts[smsQueueIndex]?.name;
+  const smsPreviewInvite = inviteRecords[0];
+  const smsPreviewText = smsPreviewInvite?.smsBody ?? 'Select contacts to create invite records and preview the SMS.';
+  const nextInviteName = inviteRecords[smsQueueIndex]?.inviteeName;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -276,8 +279,11 @@ export default function InviteFriendsScreen() {
           <View style={styles.trustPanel}>
             <TrustBullet text="Invite nearby people when nearby makes sense." />
             <TrustBullet text="Do not make distance feel like a hard rule." />
-            <TrustBullet text="Use a local school or landmark name later if the group wants one." />
+            <TrustBullet text={`This draft circle is named ${circleName}; local landmark/school naming can be refined later.`} />
             <TrustBullet text="Share App comes later, after members love using the group." />
+          </View>
+          <View style={styles.statusPanel}>
+            <Text style={styles.statusPanelText}>{pendingInvites.length} pending invite records • {acceptedInvites.length} accepted</Text>
           </View>
           <Pressable style={styles.primaryButton} onPress={() => setStep(4)}>
             <Text style={styles.primaryButtonText}>Choose trusted friends</Text>
@@ -358,26 +364,24 @@ export default function InviteFriendsScreen() {
           <Pressable
             style={[styles.primaryButton, selectedContacts.length === 0 && styles.disabledButton]}
             disabled={selectedContacts.length === 0}
-            onPress={() => {
-              resetSmsQueue();
-              setStep(5);
-            }}>
-            <Text style={styles.primaryButtonText}>Review invites</Text>
+            onPress={createInviteRecordsForReview}>
+            <Text style={styles.primaryButtonText}>Create invite records</Text>
           </Pressable>
         </View>
       ) : null}
 
       {step === 5 ? (
         <View>
-          {sentInvites.length === 0 ? (
+          {!reviewComplete ? (
             <>
               <Text style={styles.kicker}>REVIEW</Text>
               <Text style={styles.title}>Review your invites</Text>
               <Text style={styles.bodyText}>{IS_WEB ? 'Web cannot reliably open your text-message app. Copy this draft or preview the invitee flow.' : 'We’ll open one text at a time. No one is added unless they choose to join.'}</Text>
-              {selectedContacts.map((contact) => (
-                <View key={contact.id} style={styles.reviewCard}>
-                  <Text style={styles.contactName}>{contact.name}</Text>
-                  <Text style={styles.contactRole}>{contact.phone}</Text>
+              {inviteRecords.map((invite) => (
+                <View key={invite.id} style={styles.reviewCard}>
+                  <Text style={styles.contactName}>{invite.inviteeName}</Text>
+                  <Text style={styles.contactRole}>{invite.inviteePhone}</Text>
+                  <Text style={styles.contactHint}>{invite.status} • {invite.inviteLink}</Text>
                 </View>
               ))}
               <View style={styles.smsPreview}>
@@ -401,16 +405,20 @@ export default function InviteFriendsScreen() {
           ) : (
             <>
               <Text style={styles.kicker}>{IS_WEB ? 'WEB PREVIEW' : 'SENT'}</Text>
-              <Text style={styles.title}>{IS_WEB ? 'Invite UX reviewed' : 'Invites started'}</Text>
+              <Text style={styles.title}>{IS_WEB ? 'Invite records created' : 'Invites started'}</Text>
               <Text style={styles.bodyText}>
-                {IS_WEB ? 'On a real phone, each selected invite opens as a parent-controlled SMS. The parent reviews and sends from their own texting app.' : 'You’re building your TimeOut circle. When a few friends join, you can send a real sit request and AutoPing can look for the first available sitter.'}
+                {IS_WEB ? 'These invite records now exist in the mock invite store. On a real phone, each selected invite opens as a parent-controlled SMS.' : 'You’re building your TimeOut circle. When a few friends join, you can send a real sit request and AutoPing can look for the first available sitter.'}
               </Text>
-              {sentInvites.map((contact) => (
-                <View key={contact.id} style={styles.reviewCard}>
-                  <Text style={styles.contactName}>{contact.name}</Text>
+              {inviteRecords.map((invite) => (
+                <View key={invite.id} style={styles.reviewCard}>
+                  <Text style={styles.contactName}>{invite.inviteeName}</Text>
                   <Text style={styles.statusText}>{IS_WEB ? 'Ready for SMS on phone' : 'SMS opened for invite'}</Text>
+                  <Text style={styles.contactHint}>{invite.inviteLink}</Text>
                 </View>
               ))}
+              <View style={styles.statusPanel}>
+                <Text style={styles.statusPanelText}>Mock store now has {pendingInvites.length} pending invite records.</Text>
+              </View>
               <Pressable style={styles.primaryButton} onPress={() => router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } })}>
                 <Text style={styles.primaryButtonText}>Try a custom sit request</Text>
               </Pressable>
@@ -493,6 +501,8 @@ const styles = StyleSheet.create({
   trustBulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   trustBulletIcon: { color: '#be185d', fontSize: 16, fontWeight: '900', marginRight: 10 },
   trustBulletText: { color: '#63324f', flex: 1, fontSize: 15, fontWeight: '700', lineHeight: 21 },
+  statusPanel: { backgroundColor: '#ffffff', borderColor: '#f0d8e7', borderRadius: 18, borderWidth: 1, marginBottom: 12, padding: 12 },
+  statusPanelText: { color: '#7b4a65', fontSize: 14, fontWeight: '800' },
   webInfoBox: { backgroundColor: '#fff0f7', borderColor: '#f0a8cd', borderRadius: 18, borderWidth: 1, marginBottom: 12, padding: 13 },
   webInfoTitle: { color: '#8a1859', fontSize: 15, fontWeight: '900', marginBottom: 4 },
   webInfoText: { color: '#7b4a65', fontSize: 14, lineHeight: 20 },
