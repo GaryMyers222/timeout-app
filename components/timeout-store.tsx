@@ -34,6 +34,15 @@ export type EmergencyPointBreakdown = {
   totalPoints: number;
 };
 
+export type PointTransfer = {
+  id: string;
+  fromMemberName: string;
+  toMemberName: string;
+  points: number;
+  note: string;
+  createdAt: string;
+};
+
 export type SitRequest = {
   id: string;
   requestCode: string;
@@ -68,6 +77,7 @@ type CreateSitRequestInput = Omit<SitRequest, 'id' | 'requestCode' | 'groupId' |
 
 type TimeoutStoreValue = {
   requests: SitRequest[];
+  transfers: PointTransfer[];
   activeRequests: SitRequest[];
   activeRequest: SitRequest | null;
   createRequest: (input: CreateSitRequestInput) => SitRequest;
@@ -77,6 +87,7 @@ type TimeoutStoreValue = {
   markPickupComplete: (requestId: string) => void;
   endSit: (requestId: string) => void;
   settlePoints: (requestId: string) => void;
+  createTransfer: (fromMemberName: string, toMemberName: string, points: number, note: string) => void;
   resetMockRequests: () => void;
 };
 
@@ -135,12 +146,9 @@ function calculateEmergencyPoints(pickupCompletedAt?: string, sitEndedAt?: strin
   };
 }
 
-function updateRequestStatus(requests: SitRequest[], requestId: string, status: SitStatus) {
-  return requests.map((request) => (request.id === requestId ? { ...request, status } : request));
-}
-
 export function TimeoutStoreProvider({ children }: { children: React.ReactNode }) {
   const [requests, setRequests] = useState<SitRequest[]>([]);
+  const [transfers, setTransfers] = useState<PointTransfer[]>([]);
 
   const activeRequests = useMemo(
     () => requests.filter((request) => request.status === 'active'),
@@ -152,6 +160,7 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
   const value = useMemo<TimeoutStoreValue>(
     () => ({
       requests,
+      transfers,
       activeRequests,
       activeRequest,
       createRequest: (input) => {
@@ -248,9 +257,26 @@ export function TimeoutStoreProvider({ children }: { children: React.ReactNode }
           })
         );
       },
-      resetMockRequests: () => setRequests([]),
+      createTransfer: (fromMemberName, toMemberName, points, note) => {
+        const now = new Date();
+        setTransfers((current) => [
+          {
+            id: `transfer-${now.getTime()}`,
+            fromMemberName,
+            toMemberName,
+            points,
+            note,
+            createdAt: now.toISOString(),
+          },
+          ...current,
+        ]);
+      },
+      resetMockRequests: () => {
+        setRequests([]);
+        setTransfers([]);
+      },
     }),
-    [activeRequest, activeRequests, requests]
+    [activeRequest, activeRequests, requests, transfers]
   );
 
   return <TimeoutStoreContext.Provider value={value}>{children}</TimeoutStoreContext.Provider>;
