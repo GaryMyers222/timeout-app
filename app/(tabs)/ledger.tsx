@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { SitRequest, useTimeoutStore } from '@/components/timeout-store';
+import { PointTransfer, SitRequest, useTimeoutStore } from '@/components/timeout-store';
 import { POINTS_PER_HOUR } from '@/constants/timeout-rules';
 
 type LedgerEntry = {
@@ -71,8 +71,27 @@ function capPercent(points: number) {
   return Math.min(100, Math.round((Math.abs(points) / BALANCE_CAP) * 100));
 }
 
+function applyTransferToBalances(
+  members: Array<{ name: string; points: number; role: string }>,
+  transfer: PointTransfer
+) {
+  const from = members.find((member) => member.name === transfer.fromMemberName);
+  const to = members.find((member) => member.name === transfer.toMemberName);
+
+  if (from) from.points -= transfer.points;
+  else members.push({ name: transfer.fromMemberName, points: -transfer.points, role: 'Member' });
+
+  if (to) to.points += transfer.points;
+  else members.push({ name: transfer.toMemberName, points: transfer.points, role: 'Member' });
+}
+
 export default function PointsLedgerScreen() {
-  const { requests } = useTimeoutStore();
+  const { createTransfer, requests, transfers } = useTimeoutStore();
+  const [fromMemberName, setFromMemberName] = useState('Sara');
+  const [toMemberName, setToMemberName] = useState('User B');
+  const [transferPoints, setTransferPoints] = useState('4');
+  const [transferNote, setTransferNote] = useState('Correction after sit details changed off app.');
+  const [transferMessage, setTransferMessage] = useState('');
 
   const ledgerEntries = useMemo<LedgerEntry[]>(() => {
     return requests
@@ -106,10 +125,37 @@ export default function PointsLedgerScreen() {
       else next.push({ name: entry.sitterName, points: entry.points, role: 'Sitter-friend' });
     }
 
+    for (const transfer of transfers) {
+      applyTransferToBalances(next, transfer);
+    }
+
     return next.sort((a, b) => a.points - b.points);
-  }, [ledgerEntries]);
+  }, [ledgerEntries, transfers]);
 
   const totalMoved = ledgerEntries.reduce((sum, entry) => sum + entry.points, 0);
+  const totalTransferred = transfers.reduce((sum, transfer) => sum + transfer.points, 0);
+
+  function handleTransfer() {
+    const points = Number(transferPoints);
+
+    if (!fromMemberName.trim() || !toMemberName.trim()) {
+      setTransferMessage('Add both member names before posting a transfer.');
+      return;
+    }
+
+    if (fromMemberName.trim() === toMemberName.trim()) {
+      setTransferMessage('Choose two different members.');
+      return;
+    }
+
+    if (!Number.isFinite(points) || points <= 0) {
+      setTransferMessage('Transfer points must be a positive number.');
+      return;
+    }
+
+    createTransfer(fromMemberName.trim(), toMemberName.trim(), Math.round(points), transferNote.trim() || 'Point correction');
+    setTransferMessage(`Transferred ${Math.round(points)} points from ${fromMemberName.trim()} to ${toMemberName.trim()}.`);
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -128,10 +174,14 @@ export default function PointsLedgerScreen() {
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>{totalMoved}</Text>
-            <Text style={styles.summaryLabel}>points moved</Text>
+            <Text style={styles.summaryLabel}>sit points moved</Text>
           </View>
         </View>
-        <Text style={styles.helperText}>Balances are capped at -80 and +80. Corrections should use Transfer Points later; V1 avoids editing posted sits.</Text>
+        <View style={styles.summaryCardWide}>
+          <Text style={styles.summaryNumber}>{totalTransferred}</Text>
+          <Text style={styles.summaryLabel}>correction points transferred</Text>
+        </View>
+        <Text style={styles.helperText}>Balances are capped at -80 and +80. Corrections use Transfer Points; V1 avoids editing posted sits.</Text>
       </View>
 
       <View style={styles.section}>
@@ -158,6 +208,40 @@ export default function PointsLedgerScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Transfer Points correction</Text>
+        <Text style={styles.helperText}>Use this when a posted sit needs correction. The original sit remains immutable and the transfer explains the adjustment.</Text>
+        <Text style={styles.inputLabel}>From</Text>
+        <TextInput style={styles.input} value={fromMemberName} onChangeText={setFromMemberName} />
+        <Text style={styles.inputLabel}>To</Text>
+        <TextInput style={styles.input} value={toMemberName} onChangeText={setToMemberName} />
+        <Text style={styles.inputLabel}>Points</Text>
+        <TextInput style={styles.input} value={transferPoints} onChangeText={setTransferPoints} keyboardType="numeric" />
+        <Text style={styles.inputLabel}>Note</Text>
+        <TextInput style={[styles.input, styles.noteInput]} value={transferNote} onChangeText={setTransferNote} multiline />
+        <Pressable style={styles.transferButton} onPress={handleTransfer}>
+          <Text style={styles.transferButtonText}>Post Transfer Points</Text>
+        </Pressable>
+        {transferMessage ? <Text style={styles.transferMessage}>{transferMessage}</Text> : null}
+      </View>
+
+      {transfers.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Transfer history</Text>
+          {transfers.map((transfer) => (
+            <View key={transfer.id} style={styles.ledgerCard}>
+              <View style={styles.transferRow}>
+                <Text style={styles.debit}>{transfer.fromMemberName} -{transfer.points}</Text>
+                <Text style={styles.arrow}>→</Text>
+                <Text style={styles.credit}>{transfer.toMemberName} +{transfer.points}</Text>
+              </View>
+              <Text style={styles.entryDetail}>{transfer.note}</Text>
+              <Text style={styles.statusText}>correction transfer</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Member balances</Text>
         <Text style={styles.helperText}>Lowest balances appear first because AutoPing uses point circulation. Negative points are not a problem when a member stays active.</Text>
         {balances.map((member) => (
@@ -178,11 +262,6 @@ export default function PointsLedgerScreen() {
           </View>
         ))}
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Transfer Points placeholder</Text>
-        <Text style={styles.helperText}>Future correction flow: one member transfers points to another with a short note. This handles errors without editing completed sits.</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -199,6 +278,7 @@ const styles = StyleSheet.create({
   helperText: { color: '#76566a', lineHeight: 20, marginBottom: 12 },
   summaryRow: { flexDirection: 'row', gap: 12, marginBottom: 10 },
   summaryCard: { flex: 1, backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14 },
+  summaryCardWide: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 10 },
   summaryNumber: { color: '#8b2bbf', fontSize: 34, fontWeight: '900' },
   summaryLabel: { color: '#76566a', fontWeight: '800' },
   ledgerCard: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 10 },
@@ -210,6 +290,12 @@ const styles = StyleSheet.create({
   arrow: { color: '#76566a', fontWeight: '900' },
   credit: { color: '#20894d', fontWeight: '900' },
   statusText: { color: '#76566a', fontSize: 12, fontWeight: '800', marginTop: 8, textTransform: 'uppercase' },
+  inputLabel: { color: '#8b2bbf', fontWeight: '900', marginTop: 10, marginBottom: 6 },
+  input: { backgroundColor: '#fffafd', borderColor: '#ead2e2', borderWidth: 1, borderRadius: 14, color: '#372333', padding: 12 },
+  noteInput: { minHeight: 72, textAlignVertical: 'top' },
+  transferButton: { backgroundColor: '#8b2bbf', borderRadius: 16, padding: 14, alignItems: 'center', marginTop: 14 },
+  transferButtonText: { color: 'white', fontWeight: '900' },
+  transferMessage: { color: '#20894d', fontWeight: '800', marginTop: 10 },
   balanceCard: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0d8e7' },
   balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   memberName: { color: '#372333', fontWeight: '900', fontSize: 16 },
