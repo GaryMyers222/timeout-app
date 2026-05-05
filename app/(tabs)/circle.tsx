@@ -56,9 +56,11 @@ export default function CircleScreen() {
         <Text style={styles.sectionTitle}>Circle tools</Text>
         <Text style={styles.helperText}>Secondary tools live here so the phone tab bar stays simple.</Text>
         <View style={styles.toolGrid}>
+          <ToolButton title="Onboarding" subtitle="First-run story" onPress={() => router.push('/onboarding')} />
           <ToolButton title="Invite Friends" subtitle="Invite vs Share" onPress={() => router.push('/invite')} />
           <ToolButton title="Ping Order" subtitle="Candidate control" onPress={() => router.push('/ping-order')} />
           <ToolButton title="Community" subtitle="Playdates + gatherings" onPress={() => router.push('/community')} />
+          <ToolButton title="Safety" subtitle="Consent + legal readiness" onPress={() => router.push('/safety')} />
           <ToolButton title="Ledger" subtitle="Points + transfers" onPress={() => router.push('/ledger')} />
         </View>
       </View>
