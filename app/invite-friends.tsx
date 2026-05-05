@@ -25,6 +25,7 @@ const MOCK_CONTACTS: InviteContact[] = [
 
 const INVITER_NAME = 'Sarah';
 const INVITE_LINK = 'https://timeout.example/invite/sarah-circle';
+const IS_WEB = Platform.OS === 'web';
 
 function buildInviteMessage(inviteeName: string) {
   const firstName = inviteeName.split(' ')[0] || inviteeName;
@@ -87,6 +88,11 @@ export default function InviteFriendsScreen() {
     setContactsMessage('');
 
     try {
+      if (IS_WEB) {
+        setContactsMessage('Phone contacts are tested on a real phone. Web keeps the safe mock list and manual phone entry.');
+        return;
+      }
+
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
         setContactsMessage('Contact access was not granted. You can still enter phone numbers manually.');
@@ -142,11 +148,16 @@ export default function InviteFriendsScreen() {
   }
 
   async function openSmsForContact(contact: InviteContact) {
+    if (IS_WEB) {
+      Alert.alert('Web preview', 'On a phone, TimeOut opens the native SMS app with this message prefilled. On web, copy the SMS preview text instead.');
+      return false;
+    }
+
     const smsUrl = buildSmsUrl(contact);
     const canOpen = await Linking.canOpenURL(smsUrl);
 
     if (!canOpen) {
-      Alert.alert('SMS not available', 'This device or browser cannot open a text message. The invite is still saved in this screen for review.');
+      Alert.alert('SMS not available', 'This device cannot open a text message. The invite is still saved in this screen for review.');
       return false;
     }
 
@@ -156,6 +167,12 @@ export default function InviteFriendsScreen() {
 
   async function sendInvites() {
     if (selectedContacts.length === 0) return;
+
+    if (IS_WEB) {
+      setSentInvites(selectedContacts);
+      setStep(5);
+      return;
+    }
 
     const nextContact = selectedContacts[smsQueueIndex];
     const opened = await openSmsForContact(nextContact);
@@ -282,6 +299,13 @@ export default function InviteFriendsScreen() {
             <TrustBullet text="No credit card needed. Cancel anytime." />
           </View>
 
+          {IS_WEB ? (
+            <View style={styles.webInfoBox}>
+              <Text style={styles.webInfoTitle}>Web preview mode</Text>
+              <Text style={styles.webInfoText}>Phone contacts and SMS composer are tested on a real phone. In web mode, use the mock list or manual phone entry to review the UX.</Text>
+            </View>
+          ) : null}
+
           <View style={styles.contactActionRow}>
             <Pressable style={styles.contactLoadButton} onPress={loadDeviceContacts} disabled={isLoadingContacts}>
               <Text style={styles.contactLoadButtonText}>{isLoadingContacts ? 'Loading contacts...' : 'Load phone contacts'}</Text>
@@ -349,7 +373,7 @@ export default function InviteFriendsScreen() {
             <>
               <Text style={styles.kicker}>REVIEW</Text>
               <Text style={styles.title}>Review your invites</Text>
-              <Text style={styles.bodyText}>We’ll open one text at a time. No one is added unless they choose to join.</Text>
+              <Text style={styles.bodyText}>{IS_WEB ? 'Web cannot reliably open your text-message app. Copy this draft or preview the invitee flow.' : 'We’ll open one text at a time. No one is added unless they choose to join.'}</Text>
               {selectedContacts.map((contact) => (
                 <View key={contact.id} style={styles.reviewCard}>
                   <Text style={styles.contactName}>{contact.name}</Text>
@@ -357,12 +381,18 @@ export default function InviteFriendsScreen() {
                 </View>
               ))}
               <View style={styles.smsPreview}>
-                <Text style={styles.smsLabel}>SMS preview</Text>
-                <Text style={styles.smsText}>{smsPreviewText}</Text>
+                <Text style={styles.smsLabel}>{IS_WEB ? 'Copyable SMS preview' : 'SMS preview'}</Text>
+                <Text selectable style={styles.smsText}>{smsPreviewText}</Text>
               </View>
-              {nextInviteName ? <Text style={styles.contactsMessage}>Next text: {nextInviteName}</Text> : null}
+              {IS_WEB ? (
+                <View style={styles.webInfoBox}>
+                  <Text style={styles.webInfoTitle}>Phone behavior</Text>
+                  <Text style={styles.webInfoText}>On iPhone or Android, this button opens the native SMS app with the invite prefilled. The parent still taps Send.</Text>
+                </View>
+              ) : null}
+              {nextInviteName && !IS_WEB ? <Text style={styles.contactsMessage}>Next text: {nextInviteName}</Text> : null}
               <Pressable style={styles.primaryButton} onPress={sendInvites}>
-                <Text style={styles.primaryButtonText}>{smsQueueIndex === 0 ? 'Send first invite' : 'Send next invite'}</Text>
+                <Text style={styles.primaryButtonText}>{IS_WEB ? 'Mark reviewed in web preview' : smsQueueIndex === 0 ? 'Send first invite' : 'Send next invite'}</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={() => setStep(4)}>
                 <Text style={styles.secondaryButtonText}>Edit list</Text>
@@ -370,15 +400,15 @@ export default function InviteFriendsScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.kicker}>SENT</Text>
-              <Text style={styles.title}>Invites started</Text>
+              <Text style={styles.kicker}>{IS_WEB ? 'WEB PREVIEW' : 'SENT'}</Text>
+              <Text style={styles.title}>{IS_WEB ? 'Invite UX reviewed' : 'Invites started'}</Text>
               <Text style={styles.bodyText}>
-                You’re building your TimeOut circle. When a few friends join, you can send a real sit request and AutoPing can look for the first available sitter.
+                {IS_WEB ? 'On a real phone, each selected invite opens as a parent-controlled SMS. The parent reviews and sends from their own texting app.' : 'You’re building your TimeOut circle. When a few friends join, you can send a real sit request and AutoPing can look for the first available sitter.'}
               </Text>
               {sentInvites.map((contact) => (
                 <View key={contact.id} style={styles.reviewCard}>
                   <Text style={styles.contactName}>{contact.name}</Text>
-                  <Text style={styles.statusText}>SMS opened for invite</Text>
+                  <Text style={styles.statusText}>{IS_WEB ? 'Ready for SMS on phone' : 'SMS opened for invite'}</Text>
                 </View>
               ))}
               <Pressable style={styles.primaryButton} onPress={() => router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } })}>
@@ -463,6 +493,9 @@ const styles = StyleSheet.create({
   trustBulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   trustBulletIcon: { color: '#be185d', fontSize: 16, fontWeight: '900', marginRight: 10 },
   trustBulletText: { color: '#63324f', flex: 1, fontSize: 15, fontWeight: '700', lineHeight: 21 },
+  webInfoBox: { backgroundColor: '#fff0f7', borderColor: '#f0a8cd', borderRadius: 18, borderWidth: 1, marginBottom: 12, padding: 13 },
+  webInfoTitle: { color: '#8a1859', fontSize: 15, fontWeight: '900', marginBottom: 4 },
+  webInfoText: { color: '#7b4a65', fontSize: 14, lineHeight: 20 },
   contactActionRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   contactLoadButton: { flex: 1, backgroundColor: '#be185d', borderRadius: 16, padding: 14 },
   contactLoadButtonText: { color: '#ffffff', fontWeight: '900', textAlign: 'center' },
