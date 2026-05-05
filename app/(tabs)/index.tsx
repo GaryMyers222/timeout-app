@@ -15,7 +15,7 @@ export default function TimeOutHomeScreen() {
   }
 
   function openCustom() {
-    router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } });
+    router.push('/custom-sit-request');
   }
 
   function openInviteFlow() {
