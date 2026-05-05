@@ -42,12 +42,13 @@ function displayDuration(hour: string, minute: string) {
 
 export default function CreateSitRequestScreen() {
   const router = useRouter();
-  const { preset } = useLocalSearchParams<{ preset?: SitPresetKey }>();
-  const { activeRequest, cancelActiveRequest, createRequest } = useTimeoutStore();
+  const { mode, preset } = useLocalSearchParams<{ preset?: SitPresetKey; mode?: string }>();
+  const { createRequest } = useTimeoutStore();
 
   const selectedPresetKey: SitPresetKey = preset && PRESET_BY_KEY[preset] ? preset : 'custom';
   const selectedPreset = selectedPresetKey === 'custom' ? customPreset : PRESET_BY_KEY[selectedPresetKey];
   const isEmergency = selectedPresetKey === 'emergency-daycare-pickup';
+  const startsAsPastSit = mode === 'past';
 
   const [selectedHour, setSelectedHour] = useState(selectedPreset.startHour);
   const [selectedMinute, setSelectedMinute] = useState(normalizeMinute(selectedPreset.startMinute));
@@ -56,11 +57,11 @@ export default function CreateSitRequestScreen() {
   const [selectedDurationMinute, setSelectedDurationMinute] = useState(normalizeMinute(selectedPreset.durationMinute));
   const [selectedKids, setSelectedKids] = useState<KidCount>(selectedPreset.kidCount);
   const [selectedLocation, setSelectedLocation] = useState<LocationType>(selectedPreset.location);
-  const [dateLabel, setDateLabel] = useState(selectedPresetKey === 'custom' ? 'Select date' : 'Today');
-  const [comments, setComments] = useState(selectedPreset.comments);
-  const [requestTitle, setRequestTitle] = useState(selectedPreset.title);
+  const [dateLabel, setDateLabel] = useState(startsAsPastSit ? 'Yesterday' : selectedPresetKey === 'custom' ? 'Select date' : 'Today');
+  const [comments, setComments] = useState(startsAsPastSit ? 'Off-app sit recorded after the fact.' : selectedPreset.comments);
+  const [requestTitle, setRequestTitle] = useState(startsAsPastSit ? 'Past Sit Entry' : selectedPreset.title);
   const [autoPingMode, setAutoPingMode] = useState<AutoPingMode>(selectedPreset.autoPingMode);
-  const [isPastSit, setIsPastSit] = useState(false);
+  const [isPastSit, setIsPastSit] = useState(startsAsPastSit);
 
   const [pickupTiming, setPickupTiming] = useState<PickupTiming>('ASAP');
   const [pickupLocation, setPickupLocation] = useState('');
@@ -97,11 +98,11 @@ export default function CreateSitRequestScreen() {
     setSelectedDurationMinute(normalizeMinute(selectedPreset.durationMinute));
     setSelectedKids(selectedPreset.kidCount);
     setSelectedLocation(selectedPreset.location);
-    setDateLabel(selectedPresetKey === 'custom' ? 'Select date' : 'Today');
-    setComments(selectedPreset.comments);
-    setRequestTitle(selectedPreset.title);
+    setDateLabel(startsAsPastSit ? 'Yesterday' : selectedPresetKey === 'custom' ? 'Select date' : 'Today');
+    setComments(startsAsPastSit ? 'Off-app sit recorded after the fact.' : selectedPreset.comments);
+    setRequestTitle(startsAsPastSit ? 'Past Sit Entry' : selectedPreset.title);
     setAutoPingMode(selectedPreset.autoPingMode);
-    setIsPastSit(false);
+    setIsPastSit(startsAsPastSit);
     setPickupTiming('ASAP');
     setPickupLocation('');
     setPickupContact('');
@@ -110,7 +111,7 @@ export default function CreateSitRequestScreen() {
     setDaycareDetails('');
     setValidationMessage('');
     setShowEmergencyConfirm(false);
-  }, [selectedPresetKey]);
+  }, [selectedPresetKey, startsAsPastSit]);
 
   const autoPingSummary = useMemo(() => {
     if (isPastSit) return 'Past Sit Mode: requester-only entry, no AutoPing, immediate ledger posting.';
@@ -146,7 +147,7 @@ export default function CreateSitRequestScreen() {
       isPastSit,
       autoPingMode: isPastSit ? 'disabled' : autoPingMode,
     });
-    router.replace({ pathname: '/explore', params: { requestId: nextRequest.id } });
+    router.replace({ pathname: isPastSit ? '/ledger' : '/explore', params: { requestId: nextRequest.id } });
   }
 
   function validateRequest() {
@@ -165,21 +166,11 @@ export default function CreateSitRequestScreen() {
 
     setValidationMessage('');
 
-    if (activeRequest && !isPastSit) {
-      setValidationMessage('There is already an active AutoPing today. Cancel it from Status, or use Past Sit for an off-app sit.');
-      return;
-    }
-
     if (isEmergency && !isPastSit && !showEmergencyConfirm) {
       setShowEmergencyConfirm(true);
       return;
     }
 
-    postRequest();
-  }
-
-  function cancelExistingAndPost() {
-    cancelActiveRequest();
     postRequest();
   }
 
@@ -190,14 +181,14 @@ export default function CreateSitRequestScreen() {
           <View style={styles.heroIdentity}>
             <Image source={require('@/assets/images/icon.png')} style={styles.logo} contentFit="cover" />
             <View style={styles.heroCopy}>
-              <Text style={styles.eyebrow}>SCHEDULE MY TIMEOUT</Text>
+              <Text style={styles.eyebrow}>{isPastSit ? 'RECORD OFF-APP SIT' : 'SCHEDULE MY TIMEOUT'}</Text>
               <Text style={styles.title}>{requestTitle}</Text>
               <Text style={styles.subtitle}>Friends make the best sitters. The points will work out.</Text>
             </View>
           </View>
         </View>
         <View style={styles.infoCard}>
-          <Text style={styles.infoCardLabel}>AUTOPING MODE</Text>
+          <Text style={styles.infoCardLabel}>POSTING MODE</Text>
           <Text style={styles.infoCardText}>{autoPingSummary}</Text>
         </View>
       </View>
@@ -278,7 +269,7 @@ export default function CreateSitRequestScreen() {
       )}
 
       <View style={styles.sectionCard}>
-        <Text style={styles.label}>Estimated Points</Text>
+        <Text style={styles.label}>{isPastSit ? 'Points to Post' : 'Estimated Points'}</Text>
         <View style={styles.pointRow}><Text style={styles.pointNumber}>{pointBreakdown.totalPoints}</Text><Text style={styles.pointText}>points</Text></View>
         <Text style={styles.pointDetail}>Base {pointBreakdown.basePoints} + kids {pointBreakdown.kidsBonus} + location {pointBreakdown.locationBonus} + emergency {pointBreakdown.emergencyBonus}</Text>
       </View>
@@ -309,14 +300,8 @@ export default function CreateSitRequestScreen() {
         </View>
       ) : null}
 
-      {activeRequest && !isPastSit ? (
-        <TouchableOpacity style={styles.warningButton} onPress={cancelExistingAndPost}>
-          <Text style={styles.warningButtonText}>Cancel Existing AutoPing & Post This One</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>{isEmergency ? (showEmergencyConfirm ? 'Broadcast Now' : 'Confirm Emergency Details') : isPastSit ? 'Log Past Sit' : 'Start AutoPing'}</Text>
+        <Text style={styles.primaryButtonText}>{isEmergency ? (showEmergencyConfirm ? 'Broadcast Now' : 'Confirm Emergency Details') : isPastSit ? 'Post Past Sit to Ledger' : 'Start AutoPing'}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.ghostButton} onPress={() => router.back()}><Text style={styles.ghostButtonText}>Back to My TimeOut</Text></TouchableOpacity>
     </ScrollView>
