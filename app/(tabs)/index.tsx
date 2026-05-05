@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -15,17 +16,29 @@ export default function TimeOutHomeScreen() {
     router.push({ pathname: '/create-sit-request', params: { preset: 'custom' } });
   }
 
+  function openInviteFlow() {
+    router.push('/invite-friends');
+  }
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.kicker}>TimeOut</Text>
-        <Text style={styles.title}>Friends make the best sitters.</Text>
-        <Text style={styles.tagline}>Private circles. No strangers. Quick help when parents need breathing room.</Text>
+        <View style={styles.heroTopRow}>
+          <Image source={require('@/assets/images/icon.png')} style={styles.logo} contentFit="cover" />
+          <View style={styles.heroCopy}>
+            <Text style={styles.kicker}>TimeOut</Text>
+            <Text style={styles.title}>Friends make the best sitters.</Text>
+          </View>
+        </View>
+        <Text style={styles.tagline}>Private circles. No strangers. No public listing. No credit card needed.</Text>
         <View style={styles.trustRow}>
           <Text style={styles.trustPill}>Trusted friends</Text>
           <Text style={styles.trustPill}>AutoPing</Text>
-          <Text style={styles.trustPill}>Points balance</Text>
+          <Text style={styles.trustPill}>Sitter supply</Text>
         </View>
+        <Pressable style={styles.inviteHeroButton} onPress={openInviteFlow}>
+          <Text style={styles.inviteHeroButtonText}>Build your circle</Text>
+        </Pressable>
       </View>
 
       <View style={styles.modeSwitch}>
@@ -39,7 +52,7 @@ export default function TimeOutHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Pick the kind of help you need</Text>
-        <Text style={styles.helperText}>One tap starts a familiar request. Review the details before AutoPing sends.</Text>
+        <Text style={styles.helperText}>One tap spotlights the dream: Date Night, Emergency Daycare Pickup, and other familiar asks. Most real use can still start with Custom Sit.</Text>
         {TIMEOUT_PRESETS.map((preset) => (
           <Pressable
             key={preset.key}
@@ -57,10 +70,19 @@ export default function TimeOutHomeScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Build the sitter supply</Text>
+        <Text style={styles.helperText}>TimeOut works because your trusted friends want TimeOut too. Start with 3–4 families, then invite more trusted people as they come to mind.</Text>
+        <Pressable style={styles.circleButton} onPress={openInviteFlow}>
+          <Text style={styles.circleButtonText}>Invite trusted friends</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>How TimeOut works</Text>
         <View style={styles.ruleRow}><Text style={styles.ruleDot}>1</Text><Text style={styles.ruleText}>Invite trusted sitter-friends into a private circle.</Text></View>
         <View style={styles.ruleRow}><Text style={styles.ruleDot}>2</Text><Text style={styles.ruleText}>Create a sit request with presets or custom details.</Text></View>
-        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>AutoPing finds the first YES and points keep the circle moving.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>3</Text><Text style={styles.ruleText}>AutoPing avoids broadcast spam and finds the first YES.</Text></View>
+        <View style={styles.ruleRow}><Text style={styles.ruleDot}>4</Text><Text style={styles.ruleText}>Points help the circle keep moving because everyone wants TimeOut.</Text></View>
       </View>
     </ScrollView>
   );
@@ -79,11 +101,16 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
+  heroTopRow: { alignItems: 'center', flexDirection: 'row', marginBottom: 10 },
+  logo: { borderRadius: 18, height: 68, marginRight: 14, width: 68 },
+  heroCopy: { flex: 1 },
   kicker: { color: '#ffd5ef', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
-  title: { color: 'white', fontSize: 31, fontWeight: '900', marginTop: 6, lineHeight: 36 },
+  title: { color: 'white', fontSize: 29, fontWeight: '900', marginTop: 6, lineHeight: 34 },
   tagline: { color: '#ffeaf7', fontSize: 16, marginTop: 8, lineHeight: 22 },
   trustRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 18 },
   trustPill: { color: 'white', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, fontWeight: '800' },
+  inviteHeroButton: { backgroundColor: '#ffffff', borderRadius: 18, marginTop: 18, padding: 15 },
+  inviteHeroButtonText: { color: '#8b2bbf', fontSize: 16, fontWeight: '900', textAlign: 'center' },
   modeSwitch: { flexDirection: 'row', backgroundColor: '#f2dced', borderRadius: 18, padding: 4, marginBottom: 14 },
   modeButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 14 },
   modeSelected: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
@@ -101,6 +128,8 @@ const styles = StyleSheet.create({
   presetTitle: { color: '#372333', fontWeight: '900', fontSize: 16 },
   presetSubtitle: { color: '#76566a', marginTop: 3 },
   chevron: { fontSize: 30, color: '#8b2bbf' },
+  circleButton: { backgroundColor: '#be185d', borderRadius: 16, padding: 14, alignItems: 'center' },
+  circleButtonText: { color: 'white', fontWeight: '900', fontSize: 16 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   ruleDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f4e6ff', color: '#8b2bbf', fontWeight: '900', textAlign: 'center', lineHeight: 28, marginRight: 10 },
   ruleText: { flex: 1, color: '#372333', fontWeight: '700', lineHeight: 20 },
