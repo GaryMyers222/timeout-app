@@ -32,6 +32,10 @@ export default function RootLayout() {
               name="invitee-preview"
               options={{ presentation: 'card', title: 'Private Invite' }}
             />
+            <Stack.Screen
+              name="circle-status"
+              options={{ presentation: 'card', title: 'Circle Status' }}
+            />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="auto" />
