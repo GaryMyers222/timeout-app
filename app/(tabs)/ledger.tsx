@@ -14,11 +14,13 @@ type LedgerEntry = {
   status: string;
 };
 
+const BALANCE_CAP = 80;
+
 const STARTING_BALANCES = [
-  { name: 'Sara', points: 10, role: 'Requester' },
-  { name: 'User B', points: -21, role: 'Sitter-friend' },
-  { name: 'User D', points: 3, role: 'Sitter-friend' },
-  { name: 'User E', points: 9, role: 'Sitter-friend' },
+  { name: 'Sara', points: 0, role: 'Requester' },
+  { name: 'User B', points: 0, role: 'Sitter-friend' },
+  { name: 'User D', points: 0, role: 'Sitter-friend' },
+  { name: 'User E', points: 0, role: 'Sitter-friend' },
 ];
 
 function durationHours(duration: string) {
@@ -55,6 +57,18 @@ function requestDetail(request: SitRequest) {
   }
 
   return `${request.duration} hours • ${request.kidsLabel} • ${request.locationLabel}`;
+}
+
+function capStatus(points: number) {
+  if (points <= -BALANCE_CAP) return 'At lower cap';
+  if (points >= BALANCE_CAP) return 'At upper cap';
+  if (points < 0) return 'Healthy debt if active';
+  if (points === 0) return 'Half full';
+  return 'Available surplus';
+}
+
+function capPercent(points: number) {
+  return Math.min(100, Math.round((Math.abs(points) / BALANCE_CAP) * 100));
 }
 
 export default function PointsLedgerScreen() {
@@ -101,8 +115,8 @@ export default function PointsLedgerScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <Text style={styles.kicker}>Points Ledger</Text>
-        <Text style={styles.title}>The points will work out.</Text>
-        <Text style={styles.tagline}>Sits create a simple zero-sum record: requester spends points, sitter earns points.</Text>
+        <Text style={styles.title}>Zero is half full.</Text>
+        <Text style={styles.tagline}>Every member starts at zero. Requesting sits and going negative is normal when the circle is active.</Text>
       </View>
 
       <View style={styles.section}>
@@ -117,7 +131,7 @@ export default function PointsLedgerScreen() {
             <Text style={styles.summaryLabel}>points moved</Text>
           </View>
         </View>
-        <Text style={styles.helperText}>Corrections should use Transfer Points later. V1 avoids editing posted sits.</Text>
+        <Text style={styles.helperText}>Balances are capped at -80 and +80. Corrections should use Transfer Points later; V1 avoids editing posted sits.</Text>
       </View>
 
       <View style={styles.section}>
@@ -145,16 +159,22 @@ export default function PointsLedgerScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Member balances</Text>
-        <Text style={styles.helperText}>Lowest balances appear first because AutoPing uses point circulation, not a fairness claim.</Text>
+        <Text style={styles.helperText}>Lowest balances appear first because AutoPing uses point circulation. Negative points are not a problem when a member stays active.</Text>
         {balances.map((member) => (
-          <View key={member.name} style={styles.balanceRow}>
-            <View>
-              <Text style={styles.memberName}>{member.name}</Text>
-              <Text style={styles.memberRole}>{member.role}</Text>
+          <View key={member.name} style={styles.balanceCard}>
+            <View style={styles.balanceRow}>
+              <View>
+                <Text style={styles.memberName}>{member.name}</Text>
+                <Text style={styles.memberRole}>{member.role}</Text>
+              </View>
+              <Text style={[styles.balanceValue, member.points < 0 ? styles.negative : member.points > 0 ? styles.positive : styles.zero]}>
+                {member.points > 0 ? `+${member.points}` : member.points}
+              </Text>
             </View>
-            <Text style={[styles.balanceValue, member.points < 0 ? styles.negative : styles.positive]}>
-              {member.points > 0 ? `+${member.points}` : member.points}
-            </Text>
+            <View style={styles.capTrack}>
+              <View style={[styles.capFill, member.points < 0 ? styles.negativeFill : styles.positiveFill, { width: `${capPercent(member.points)}%` }]} />
+            </View>
+            <Text style={styles.capText}>{capStatus(member.points)} • cap ±{BALANCE_CAP}</Text>
           </View>
         ))}
       </View>
@@ -190,10 +210,17 @@ const styles = StyleSheet.create({
   arrow: { color: '#76566a', fontWeight: '900' },
   credit: { color: '#20894d', fontWeight: '900' },
   statusText: { color: '#76566a', fontSize: 12, fontWeight: '800', marginTop: 8, textTransform: 'uppercase' },
-  balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0d8e7' },
+  balanceCard: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0d8e7' },
+  balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   memberName: { color: '#372333', fontWeight: '900', fontSize: 16 },
   memberRole: { color: '#76566a', marginTop: 2 },
   balanceValue: { fontSize: 18, fontWeight: '900' },
   negative: { color: '#9a1f1f' },
   positive: { color: '#20894d' },
+  zero: { color: '#8b2bbf' },
+  capTrack: { backgroundColor: '#f4e6ff', borderRadius: 999, height: 8, marginTop: 10, overflow: 'hidden' },
+  capFill: { borderRadius: 999, height: 8 },
+  negativeFill: { backgroundColor: '#d46a6a' },
+  positiveFill: { backgroundColor: '#4cb878' },
+  capText: { color: '#76566a', fontSize: 12, fontWeight: '800', marginTop: 6 },
 });
