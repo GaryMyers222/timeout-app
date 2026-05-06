@@ -44,6 +44,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.3.fill" color={color} />,
         }}
       />
+      <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null }} />
       <Tabs.Screen name="ping-order" options={{ href: null }} />
       <Tabs.Screen name="community" options={{ href: null }} />
